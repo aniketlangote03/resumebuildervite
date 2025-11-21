@@ -1,7 +1,8 @@
 import express from 'express'
 import cors from 'cors'
 import dotenv from 'dotenv'
-import { MongoClient } from 'mongodb'
+import { connectDB } from './db.js'
+import Resume from './models/Resume.js'
 
 dotenv.config()
 
@@ -10,24 +11,8 @@ app.use(cors())
 app.use(express.json({ limit: '2mb' }))
 
 const PORT = process.env.PORT || 4000
-const MONGODB_URI = process.env.MONGODB_URI
-const DB_NAME = process.env.DB_NAME || 'resume_builder'
 
-if (!MONGODB_URI) {
-  console.error('Missing MONGODB_URI environment variable')
-}
-
-let client
-let db
-
-async function getDb() {
-  if (!client) {
-    client = new MongoClient(MONGODB_URI, { serverSelectionTimeoutMS: 5000 })
-    await client.connect()
-    db = client.db(DB_NAME)
-  }
-  return db
-}
+await connectDB()
 
 app.get('/api/health', (req, res) => {
   res.json({ ok: true })
@@ -35,9 +20,9 @@ app.get('/api/health', (req, res) => {
 
 app.get('/api/pingdb', async (req, res) => {
   try {
-    const database = await getDb()
-    const result = await database.command({ ping: 1 })
-    res.json({ ok: true, ping: result?.ok === 1 })
+    // If the connection is healthy, this will succeed quickly
+    await Resume.estimatedDocumentCount()
+    res.json({ ok: true, ping: true })
   } catch (e) {
     console.error('Ping failed:', e?.message || e)
     res.status(500).json({ ok: false, error: 'MongoDB ping failed' })
@@ -47,9 +32,7 @@ app.get('/api/pingdb', async (req, res) => {
 app.get('/api/resume/:id', async (req, res) => {
   try {
     const { id } = req.params
-    const database = await getDb()
-    const col = database.collection('resumes')
-    const doc = await col.findOne({ _id: id })
+    const doc = await Resume.findById(id).lean()
     if (!doc) return res.status(404).json({ error: 'Not found' })
     res.json({ data: doc.data || null, updatedAt: doc.updatedAt || null })
   } catch (e) {
@@ -65,15 +48,12 @@ app.put('/api/resume/:id', async (req, res) => {
     if (typeof payload !== 'object' || payload === null) {
       return res.status(400).json({ error: 'Invalid data' })
     }
-    const database = await getDb()
-    const col = database.collection('resumes')
-    const updatedAt = new Date()
-    await col.updateOne(
-      { _id: id },
-      { $set: { data: payload, updatedAt } },
-      { upsert: true }
+    const updated = await Resume.findByIdAndUpdate(
+      id,
+      { $set: { data: payload } },
+      { new: true, upsert: true, setDefaultsOnInsert: true }
     )
-    res.json({ ok: true, updatedAt })
+    res.json({ ok: true, updatedAt: updated.updatedAt })
   } catch (e) {
     console.error(e)
     res.status(500).json({ error: 'Server error' })
@@ -83,3 +63,4 @@ app.put('/api/resume/:id', async (req, res) => {
 app.listen(PORT, () => {
   console.log(`Server listening on http://localhost:${PORT}`)
 })
+

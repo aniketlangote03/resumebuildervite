@@ -1,4 +1,16 @@
-const BASE = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_API_URL) || '/api'
+const BASE = (() => {
+  try {
+    const envUrl = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_API_URL) || ''
+    if (envUrl) return envUrl
+    if (typeof window !== 'undefined' && window.location?.protocol?.startsWith('http')) {
+      const isLocal = /^localhost(:\d+)?$/i.test(window.location.hostname) || window.location.hostname === '127.0.0.1'
+      if (isLocal) return 'http://localhost:4000/api'
+    }
+    return '/api'
+  } catch {
+    return '/api'
+  }
+})()
 
 async function request(path, options = {}) {
   try {

@@ -23,7 +23,16 @@ export default function Builder({ initialData, selectedTemplate, onBack, userId 
   const [showSaveLoad, setShowSaveLoad] = useState(false)
   const [showAnalytics, setShowAnalytics] = useState(false)
   const [showCover, setShowCover] = useState(false)
-  const [activeTab, setActiveTab] = useState('personal')
+  const [activeTab, setActiveTab] = useState(
+    (() => {
+      try {
+        const t = localStorage.getItem('activeTab')
+        return t || 'personal'
+      } catch {
+        return 'personal'
+      }
+    })()
+  )
   const [recentSaves, setRecentSaves] = useState([])
 
   useEffect(() => {
@@ -51,6 +60,37 @@ export default function Builder({ initialData, selectedTemplate, onBack, userId 
     const idx = lsLoad('saved_index', []) || []
     setRecentSaves(idx.slice(0, 3))
   }, [showSaveLoad])
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('activeTab', activeTab)
+    } catch {}
+  }, [activeTab])
+
+  // Ensure page restore returns to Builder when user is editing
+  useEffect(() => {
+    try {
+      localStorage.setItem('currentPage', 'builder')
+    } catch {}
+  }, [])
+
+  useEffect(() => {
+    const handler = () => {
+      try {
+        localStorage.setItem('currentResumeData', JSON.stringify(resumeData))
+        localStorage.setItem('resumeColors', JSON.stringify(colors))
+        localStorage.setItem('resumeFont', font)
+        try { localStorage.setItem('currentPage', 'builder') } catch {}
+        if (userId && typeof fetch === 'function') {
+          const body = JSON.stringify({ data: resumeData })
+          const url = `${(typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_API_URL) || '/api'}/resume/${encodeURIComponent(userId)}`
+          fetch(url, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body, keepalive: true })
+        }
+      } catch {}
+    }
+    window.addEventListener('beforeunload', handler)
+    return () => window.removeEventListener('beforeunload', handler)
+  }, [resumeData, colors, font, userId])
 
   function getDefaultResumeData() {
     return {
