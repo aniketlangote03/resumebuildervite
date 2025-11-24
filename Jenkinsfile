@@ -14,12 +14,12 @@ spec:
   containers:
 
   - name: node
-    image: node:20-alpine
+    image: nexus.imcc.com:8083/resumebuilder-2401115/node:20-alpine
     command: ["cat"]
     tty: true
 
   - name: docker
-    image: docker:24.0.2-dind
+    image: nexus.imcc.com:8083/resumebuilder-2401115/docker:24.0.2-dind
     securityContext:
       privileged: true
     tty: true
@@ -41,7 +41,7 @@ spec:
         SONARQUBE_AUTH_TOKEN = credentials('sonartoken')
 
         DOCKER_IMAGE = "nexus.imcc.com/resumebuilder-2401115/resume-builder-app"
-        DOCKER_REGISTRY_URL = "http://nexus.imcc.com/repository/resumebuilder-2401115/"
+        DOCKER_REGISTRY_URL = "http://nexus.imcc.com:8083"
     }
 
     stages {
@@ -80,7 +80,7 @@ spec:
                               -Dsonar.projectName=Resumebuilder_Aniket_2401115 \
                               -Dsonar.sources=src \
                               -Dsonar.host.url=http://sonarqube.imcc.com \
-                              -Dsonar.login=${SONARQUBE_AUTH_TOKEN}
+                              -Dsonar.token=${SONARQUBE_AUTH_TOKEN}
                         """
                     }
                 }
@@ -91,18 +91,6 @@ spec:
             steps {
                 container('docker') {
                     sh 'dockerd-entrypoint.sh & sleep 12'
-
-                    // 🔥 FIX: DockerHub login to avoid 429 errors
-                    withCredentials([usernamePassword(
-                        credentialsId: 'dockerhub-creds',
-                        usernameVariable: 'DH_USER',
-                        passwordVariable: 'DH_PASS'
-                    )]) {
-                        sh """
-                            echo "$DH_PASS" | docker login -u "$DH_USER" --password-stdin
-                        """
-                    }
-
                     script {
                         def tag = env.BUILD_NUMBER
                         sh "docker build -t ${DOCKER_IMAGE}:${tag} ."
@@ -115,11 +103,12 @@ spec:
         stage('Push Docker Image to Nexus') {
             steps {
                 container('docker') {
-                    script {
-                        docker.withRegistry("${DOCKER_REGISTRY_URL}", "nexus-creds-resumebuilder") {
-                            sh "docker push ${DOCKER_IMAGE}:${env.BUILD_NUMBER}"
-                            sh "docker push ${DOCKER_IMAGE}:latest"
-                        }
+                    withCredentials([usernamePassword(credentialsId: 'nexus-creds-resumebuilder', usernameVariable: 'NUSER', passwordVariable: 'NPASS')]) {
+                        sh """
+                            echo $NPASS | docker login nexus.imcc.com:8083 -u $NUSER --password-stdin
+                            docker push ${DOCKER_IMAGE}:${env.BUILD_NUMBER}
+                            docker push ${DOCKER_IMAGE}:latest
+                        """
                     }
                 }
             }
