@@ -7,9 +7,8 @@ kind: Pod
 spec:
   containers:
   - name: node
-    image: node:20-alpine   # ✅ FIXED — Node 20 for Vite
-    command:
-    - cat
+    image: node:20-alpine    # ✔ FIXED Node version
+    command: ["cat"]
     tty: true
   - name: docker
     image: docker:dind
@@ -17,7 +16,7 @@ spec:
       privileged: true
     tty: true
   - name: jnlp
-    image: jenkins/inbound-agent:3283.v92c105e0f819-7
+    image: jenkins/inbound-agent:3309.v27b9314fd1a4-1
     tty: true
 """
         }
@@ -89,12 +88,14 @@ spec:
             }
         }
 
-        stage('Push to Nexus') {
+        stage('Push Docker Image to Nexus') {
             steps {
                 container('docker') {
-                    docker.withRegistry("${DOCKER_REGISTRY_URL}", "nexus-creds-resumebuilder") {
-                        sh "docker push ${DOCKER_IMAGE}:${env.BUILD_NUMBER}"
-                        sh "docker push ${DOCKER_IMAGE}:latest"
+                    script {
+                        docker.withRegistry("${DOCKER_REGISTRY_URL}", "nexus-creds-resumebuilder") {
+                            sh "docker push ${DOCKER_IMAGE}:${env.BUILD_NUMBER}"
+                            sh "docker push ${DOCKER_IMAGE}:latest"
+                        }
                     }
                 }
             }
@@ -103,19 +104,26 @@ spec:
         stage('Deploy') {
             steps {
                 container('docker') {
-                    sh """
-                        docker rm -f resume-builder-container || true
-                        docker run -d -p 8080:80 \
-                        --name resume-builder-container \
-                        ${DOCKER_IMAGE}:latest
-                    """
+                    script {
+                        sh """
+                            docker rm -f resume-builder-container || true
+
+                            docker run -d -p 8080:80 \
+                            --name resume-builder-container \
+                            ${DOCKER_IMAGE}:latest
+                        """
+                    }
                 }
             }
         }
     }
 
     post {
-        success { echo "🚀 Deployment successful!" }
-        failure { echo "❌ Pipeline failed! Check logs." }
+        success {
+            echo "🚀 Deployment successful!"
+        }
+        failure {
+            echo "❌ Pipeline failed — check logs."
+        }
     }
 }
