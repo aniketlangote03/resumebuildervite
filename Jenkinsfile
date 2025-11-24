@@ -14,7 +14,7 @@ spec:
   containers:
 
   - name: node
-    image: node:20-alpine
+    image: nexus.imcc.com:8083/library/node:20-alpine
     command: ["cat"]
     tty: true
 
@@ -22,15 +22,14 @@ spec:
     image: docker:24.0.2-dind
     securityContext:
       privileged: true
-    command:
-      - dockerd-entrypoint.sh
+    command: ["dockerd-entrypoint.sh"]
     args:
       - "--host=tcp://0.0.0.0:2376"
       - "--storage-driver=overlay2"
-    tty: true
     env:
       - name: DOCKER_TLS_CERTDIR
         value: ""
+    tty: true
 
   - name: sonar
     image: sonarsource/sonar-scanner-cli:latest
@@ -49,7 +48,6 @@ spec:
         SONARQUBE_AUTH_TOKEN = credentials('sonartoken')
 
         DOCKER_IMAGE = "nexus.imcc.com:8083/resumebuilder-2401115/resume-builder-app"
-        DOCKER_REGISTRY_URL = "http://nexus.imcc.com:8083"
     }
 
     stages {
@@ -77,7 +75,7 @@ spec:
         }
 
         /* ========================
-                BUILD
+                BUILD REACT
         ========================= */
         stage('Build React App') {
             steps {
@@ -96,11 +94,11 @@ spec:
                     withSonarQubeEnv("${SONARQUBE_ENV}") {
                         sh """
                             sonar-scanner \
-                              -Dsonar.projectKey=Resumebuilder_Aniket_2401115 \
-                              -Dsonar.projectName=Resumebuilder_Aniket_2401115 \
-                              -Dsonar.sources=src \
-                              -Dsonar.host.url=http://sonarqube.imcc.com \
-                              -Dsonar.token=${SONARQUBE_AUTH_TOKEN}
+                                -Dsonar.projectKey=Resumebuilder_Aniket_2401115 \
+                                -Dsonar.projectName=Resumebuilder_Aniket_2401115 \
+                                -Dsonar.sources=src \
+                                -Dsonar.host.url=http://sonarqube.imcc.com \
+                                -Dsonar.token=${SONARQUBE_AUTH_TOKEN}
                         """
                     }
                 }
@@ -113,29 +111,18 @@ spec:
         stage('Build Docker Image') {
             steps {
                 container('docker') {
-                    withCredentials([usernamePassword(
-                        credentialsId: 'dockerhub-creds',
-                        usernameVariable: 'DH_USER',
-                        passwordVariable: 'DH_PASS'
-                    )]) {
-
-                        sh '''
-                            # Login to avoid Docker Hub rate limits
-                            echo "$DH_PASS" | docker login -u "$DH_USER" --password-stdin
-
-                            echo "Waiting for Docker daemon to be ready..."
-                            until docker info >/dev/null 2>&1; do
-                              sleep 2
-                            done
-                        '''
-
-                        script {
-                            def tag = env.BUILD_NUMBER
-                            sh """
-                                docker build -t ${DOCKER_IMAGE}:${tag} .
-                                docker tag ${DOCKER_IMAGE}:${tag} ${DOCKER_IMAGE}:latest
-                            """
-                        }
+                    sh '''
+                        echo "Waiting for Docker daemon to be ready..."
+                        until docker info >/dev/null 2>&1; do
+                          sleep 2
+                        done
+                    '''
+                    script {
+                        def tag = env.BUILD_NUMBER
+                        sh """
+                            docker build -t ${DOCKER_IMAGE}:${tag} .
+                            docker tag ${DOCKER_IMAGE}:${tag} ${DOCKER_IMAGE}:latest
+                        """
                     }
                 }
             }
@@ -171,9 +158,10 @@ spec:
                 container('docker') {
                     sh """
                         docker rm -f resume-builder-container || true
+
                         docker run -d -p 8080:80 \
-                          --name resume-builder-container \
-                          ${DOCKER_IMAGE}:latest
+                            --name resume-builder-container \
+                            ${DOCKER_IMAGE}:latest
                     """
                 }
             }
