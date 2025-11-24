@@ -5,6 +5,11 @@ pipeline {
 apiVersion: v1
 kind: Pod
 spec:
+  hostAliases:
+  - ip: "192.168.20.250"
+    hostnames:
+    - "sonarqube.imcc.com"
+
   containers:
 
   - name: node
@@ -40,33 +45,6 @@ spec:
 
     stages {
 
-        /* ------------------------------------------------------------------ *
-         *  NEW CURL-BASED SONARQUBE DNS TEST (THIS WORKS)
-         * ------------------------------------------------------------------ */
-        stage('Test SonarQube DNS') {
-            steps {
-                container('sonar') {
-                    sh """
-                        echo 'Testing internal SonarQube URLs...'
-
-                        echo '--- Test 1 ---'
-                        curl -I http://sonarqube.sonarqube.svc.cluster.local:9000 || true
-
-                        echo '--- Test 2 ---'
-                        curl -I http://sonarqube.default.svc.cluster.local:9000 || true
-
-                        echo '--- Test 3 ---'
-                        curl -I http://sonarqube.svc.cluster.local:9000 || true
-
-                        echo '--- Test 4 ---'
-                        curl -I http://sonarqube:9000 || true
-
-                        echo 'DNS test finished.'
-                    """
-                }
-            }
-        }
-
         stage('Checkout') {
             steps {
                 git branch: 'main',
@@ -100,7 +78,7 @@ spec:
                               -Dsonar.projectKey=Resumebuilder_Aniket_2401115 \
                               -Dsonar.projectName=Resumebuilder_Aniket_2401115 \
                               -Dsonar.sources=src \
-                              -Dsonar.host.url=http://REPLACE_AFTER_DNS_TEST:9000 \
+                              -Dsonar.host.url=http://sonarqube.imcc.com \
                               -Dsonar.login=${SONARQUBE_AUTH_TOKEN}
                         """
                     }
