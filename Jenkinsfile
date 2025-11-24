@@ -9,14 +9,14 @@ pipeline {
         // SonarQube Server configured in Jenkins → Manage Jenkins → Configure System
         SONARQUBE_ENV = "sonarqube-imcc"
 
-        // Sonar token from Jenkins credentials
+        // SonarQube token from Jenkins credentials
         SONARQUBE_AUTH_TOKEN = credentials('sonar-token')
 
-        // Docker image in Nexus
-        DOCKER_IMAGE = "nexus.imcc.com/my-repository/resume-builder-app"
+        // Nexus Docker Registry (your NEW repo)
+        DOCKER_IMAGE = "nexus.imcc.com/resumebuilder-2401115/resume-builder-app"
 
         // Nexus Docker registry URL
-        DOCKER_REGISTRY_URL = "http://nexus.imcc.com/repository/my-repository/"
+        DOCKER_REGISTRY_URL = "http://nexus.imcc.com/repository/resumebuilder-2401115/"
     }
 
     stages {
@@ -33,7 +33,7 @@ pipeline {
         }
 
         //-----------------------------
-        // INSTALL DEPENDENCIES
+        // INSTALL NODE MODULES
         //-----------------------------
         stage('Install Dependencies') {
             steps {
@@ -42,7 +42,7 @@ pipeline {
         }
 
         //-----------------------------
-        // BUILD VITE APP
+        // BUILD REACT + VITE APP
         //-----------------------------
         stage('Build') {
             steps {
@@ -78,11 +78,8 @@ pipeline {
             steps {
                 script {
                     def tag = "${env.BUILD_NUMBER}"
-                    
-                    // Build Docker image
-                    sh "docker build -t ${DOCKER_IMAGE}:${tag} ."
 
-                    // Latest tag
+                    sh "docker build -t ${DOCKER_IMAGE}:${tag} ."
                     sh "docker tag ${DOCKER_IMAGE}:${tag} ${DOCKER_IMAGE}:latest"
                 }
             }
