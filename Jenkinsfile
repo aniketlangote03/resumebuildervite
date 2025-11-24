@@ -1,28 +1,18 @@
 pipeline {
     agent any
 
-    tools {
-        nodejs "NodeJS18"   // ✔ FIXED — Jenkins has NodeJS18, not node20
-    }
-
     environment {
-        // SonarQube server name configured in Jenkins
+        // SonarQube server configured in Jenkins → Manage Jenkins → Configure System
         SONARQUBE_ENV = "sonarqube-imcc"
 
-        // SonarQube token stored in Jenkins credentials
+        // Token stored in Jenkins credentials
         SONARQUBE_AUTH_TOKEN = credentials('sonar-token')
-
-        // Nexus repository you created: resumebuilder-2401115
-        DOCKER_IMAGE = "nexus.imcc.com/resumebuilder-2401115/resume-builder-app"
-
-        // Nexus Docker registry URL
-        DOCKER_REGISTRY_URL = "http://nexus.imcc.com/repository/resumebuilder-2401115/"
     }
 
     stages {
 
         // -----------------------------------------------------
-        // 1) CHECKOUT CODE FROM GITHUB
+        // 1) CHECKOUT CODE
         // -----------------------------------------------------
         stage('Checkout') {
             steps {
@@ -33,11 +23,11 @@ pipeline {
         }
 
         // -----------------------------------------------------
-        // 2) INSTALL NODE DEPENDENCIES
+        // 2) INSTALL DEPENDENCIES
         // -----------------------------------------------------
         stage('Install Dependencies') {
             steps {
-                sh 'npm ci || npm install'
+                sh 'npm install'
             }
         }
 
@@ -70,59 +60,14 @@ pipeline {
                 }
             }
         }
-
-        // -----------------------------------------------------
-        // 5) BUILD DOCKER IMAGE
-        // -----------------------------------------------------
-        stage('Build Docker Image') {
-            steps {
-                script {
-                    def tag = "${env.BUILD_NUMBER}"
-
-                    sh "docker build -t ${DOCKER_IMAGE}:${tag} ."
-                    sh "docker tag ${DOCKER_IMAGE}:${tag} ${DOCKER_IMAGE}:latest"
-                }
-            }
-        }
-
-        // -----------------------------------------------------
-        // 6) PUSH DOCKER IMAGE TO NEXUS
-        // -----------------------------------------------------
-        stage('Push Docker Image to Nexus') {
-            steps {
-                script {
-                    docker.withRegistry("${DOCKER_REGISTRY_URL}", "nexus-creds-resumebuilder") {
-                        sh "docker push ${DOCKER_IMAGE}:${env.BUILD_NUMBER}"
-                        sh "docker push ${DOCKER_IMAGE}:latest"
-                    }
-                }
-            }
-        }
-
-        // -----------------------------------------------------
-        // 7) DEPLOY DOCKER CONTAINER
-        // -----------------------------------------------------
-        stage('Deploy') {
-            steps {
-                script {
-                    sh """
-                        docker rm -f resume-builder-container || true
-
-                        docker run -d -p 8080:80 \
-                        --name resume-builder-container \
-                        ${DOCKER_IMAGE}:latest
-                    """
-                }
-            }
-        }
     }
 
     post {
         success {
-            echo "🚀 Deployment successful!"
+            echo "✅ Jenkins pipeline completed successfully!"
         }
         failure {
-            echo "❌ Pipeline failed! Check logs."
+            echo "❌ Pipeline failed — check the logs."
         }
     }
 }
