@@ -7,7 +7,7 @@ kind: Pod
 spec:
   containers:
   - name: node
-    image: node:18-alpine
+    image: node:20-alpine   # ✅ FIXED — Node 20 for Vite
     command:
     - cat
     tty: true
@@ -15,6 +15,9 @@ spec:
     image: docker:dind
     securityContext:
       privileged: true
+    tty: true
+  - name: jnlp
+    image: jenkins/inbound-agent:3283.v92c105e0f819-7
     tty: true
 """
         }
@@ -40,7 +43,7 @@ spec:
 
         stage('Install Dependencies') {
             steps {
-                container('node') {        // <-- RUN npm INSIDE NODE CONTAINER
+                container('node') {
                     sh 'npm install'
                 }
             }
@@ -48,7 +51,7 @@ spec:
 
         stage('Build React App') {
             steps {
-                container('node') {        // <-- RUN npm build INSIDE NODE CONTAINER
+                container('node') {
                     sh 'npm run build'
                 }
             }
@@ -86,14 +89,12 @@ spec:
             }
         }
 
-        stage('Push Docker Image to Nexus') {
+        stage('Push to Nexus') {
             steps {
                 container('docker') {
-                    script {
-                        docker.withRegistry("${DOCKER_REGISTRY_URL}", "nexus-creds-resumebuilder") {
-                            sh "docker push ${DOCKER_IMAGE}:${env.BUILD_NUMBER}"
-                            sh "docker push ${DOCKER_IMAGE}:latest"
-                        }
+                    docker.withRegistry("${DOCKER_REGISTRY_URL}", "nexus-creds-resumebuilder") {
+                        sh "docker push ${DOCKER_IMAGE}:${env.BUILD_NUMBER}"
+                        sh "docker push ${DOCKER_IMAGE}:latest"
                     }
                 }
             }
@@ -104,10 +105,9 @@ spec:
                 container('docker') {
                     sh """
                         docker rm -f resume-builder-container || true
-
                         docker run -d -p 8080:80 \
-                            --name resume-builder-container \
-                            ${DOCKER_IMAGE}:latest
+                        --name resume-builder-container \
+                        ${DOCKER_IMAGE}:latest
                     """
                 }
             }
@@ -115,11 +115,7 @@ spec:
     }
 
     post {
-        success {
-            echo "🚀 FULL Deployment successful on college server!"
-        }
-        failure {
-            echo "❌ Pipeline failed — but now it's fixable."
-        }
+        success { echo "🚀 Deployment successful!" }
+        failure { echo "❌ Pipeline failed! Check logs." }
     }
 }
