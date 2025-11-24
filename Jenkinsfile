@@ -1,19 +1,35 @@
 pipeline {
-    agent any
+    agent {
+        kubernetes {
+            yaml """
+apiVersion: v1
+kind: Pod
+spec:
+  containers:
+  - name: node
+    image: node:18-alpine
+    command:
+    - cat
+    tty: true
+  - name: docker
+    image: docker:dind
+    securityContext:
+      privileged: true
+    tty: true
+"""
+        }
+    }
 
     environment {
-        // SonarQube server configured in Jenkins → Manage Jenkins → Configure System
         SONARQUBE_ENV = "sonarqube-imcc"
-
-        // Token stored in Jenkins credentials
         SONARQUBE_AUTH_TOKEN = credentials('sonar-token')
+
+        DOCKER_IMAGE = "nexus.imcc.com/resumebuilder-2401115/resume-builder-app"
+        DOCKER_REGISTRY_URL = "http://nexus.imcc.com/repository/resumebuilder-2401115/"
     }
 
     stages {
 
-        // -----------------------------------------------------
-        // 1) CHECKOUT CODE
-        // -----------------------------------------------------
         stage('Checkout') {
             steps {
                 git branch: 'main',
@@ -22,40 +38,76 @@ pipeline {
             }
         }
 
-        // -----------------------------------------------------
-        // 2) INSTALL DEPENDENCIES
-        // -----------------------------------------------------
         stage('Install Dependencies') {
             steps {
-                sh 'npm install'
+                container('node') {        // <-- RUN npm INSIDE NODE CONTAINER
+                    sh 'npm install'
+                }
             }
         }
 
-        // -----------------------------------------------------
-        // 3) BUILD VITE PROJECT
-        // -----------------------------------------------------
-        stage('Build') {
+        stage('Build React App') {
             steps {
-                sh 'npm run build'
+                container('node') {        // <-- RUN npm build INSIDE NODE CONTAINER
+                    sh 'npm run build'
+                }
             }
         }
 
-        // -----------------------------------------------------
-        // 4) SONARQUBE ANALYSIS
-        // -----------------------------------------------------
         stage('SonarQube Analysis') {
             environment {
                 scannerHome = tool 'sonar-scanner'
             }
             steps {
-                withSonarQubeEnv("${SONARQUBE_ENV}") {
+                container('node') {
+                    withSonarQubeEnv("${SONARQUBE_ENV}") {
+                        sh """
+                            ${scannerHome}/bin/sonar-scanner \
+                            -Dsonar.projectKey=Resumebuilder_Aniket_2401115 \
+                            -Dsonar.projectName=Resumebuilder_Aniket_2401115 \
+                            -Dsonar.sources=src \
+                            -Dsonar.host.url=http://sonarqube.imcc.com \
+                            -Dsonar.login=${SONARQUBE_AUTH_TOKEN}
+                        """
+                    }
+                }
+            }
+        }
+
+        stage('Build Docker Image') {
+            steps {
+                container('docker') {
+                    script {
+                        def tag = "${env.BUILD_NUMBER}"
+                        sh "docker build -t ${DOCKER_IMAGE}:${tag} ."
+                        sh "docker tag ${DOCKER_IMAGE}:${tag} ${DOCKER_IMAGE}:latest"
+                    }
+                }
+            }
+        }
+
+        stage('Push Docker Image to Nexus') {
+            steps {
+                container('docker') {
+                    script {
+                        docker.withRegistry("${DOCKER_REGISTRY_URL}", "nexus-creds-resumebuilder") {
+                            sh "docker push ${DOCKER_IMAGE}:${env.BUILD_NUMBER}"
+                            sh "docker push ${DOCKER_IMAGE}:latest"
+                        }
+                    }
+                }
+            }
+        }
+
+        stage('Deploy') {
+            steps {
+                container('docker') {
                     sh """
-                        ${scannerHome}/bin/sonar-scanner \
-                        -Dsonar.projectKey=Resumebuilder_Aniket_2401115 \
-                        -Dsonar.projectName=Resumebuilder_Aniket_2401115 \
-                        -Dsonar.sources=src \
-                        -Dsonar.host.url=http://sonarqube.imcc.com \
-                        -Dsonar.login=${SONARQUBE_AUTH_TOKEN}
+                        docker rm -f resume-builder-container || true
+
+                        docker run -d -p 8080:80 \
+                            --name resume-builder-container \
+                            ${DOCKER_IMAGE}:latest
                     """
                 }
             }
@@ -64,10 +116,10 @@ pipeline {
 
     post {
         success {
-            echo "✅ Jenkins pipeline completed successfully!"
+            echo "🚀 FULL Deployment successful on college server!"
         }
         failure {
-            echo "❌ Pipeline failed — check the logs."
+            echo "❌ Pipeline failed — but now it's fixable."
         }
     }
 }
