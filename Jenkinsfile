@@ -91,6 +91,18 @@ spec:
             steps {
                 container('docker') {
                     sh 'dockerd-entrypoint.sh & sleep 12'
+
+                    // 🔥 FIX: DockerHub login to avoid 429 errors
+                    withCredentials([usernamePassword(
+                        credentialsId: 'dockerhub-creds',
+                        usernameVariable: 'DH_USER',
+                        passwordVariable: 'DH_PASS'
+                    )]) {
+                        sh """
+                            echo "$DH_PASS" | docker login -u "$DH_USER" --password-stdin
+                        """
+                    }
+
                     script {
                         def tag = env.BUILD_NUMBER
                         sh "docker build -t ${DOCKER_IMAGE}:${tag} ."
