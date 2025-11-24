@@ -40,6 +40,25 @@ spec:
 
     stages {
 
+        /* ------------------------------------------------------------------ *
+         *  NEW STAGE TO FIND REAL SONARQUBE INTERNAL DNS
+         * ------------------------------------------------------------------ */
+        stage('Test SonarQube DNS') {
+            steps {
+                container('sonar') {
+                    sh """
+                        echo "Testing internal SonarQube DNS names..."
+
+                        ping -c 3 sonarqube.sonarqube.svc.cluster.local || true
+                        ping -c 3 sonarqube.default.svc.cluster.local || true
+                        ping -c 3 sonarqube.svc.cluster.local || true
+
+                        echo "DNS test finished."
+                    """
+                }
+            }
+        }
+
         stage('Checkout') {
             steps {
                 git branch: 'main',
@@ -73,7 +92,7 @@ spec:
                               -Dsonar.projectKey=Resumebuilder_Aniket_2401115 \
                               -Dsonar.projectName=Resumebuilder_Aniket_2401115 \
                               -Dsonar.sources=src \
-                              -Dsonar.host.url=http://sonarqube.sonarqube.svc.cluster.local:9000 \
+                              -Dsonar.host.url=http://REPLACE_ME_AFTER_DNS_TEST:9000 \
                               -Dsonar.login=${SONARQUBE_AUTH_TOKEN}
                         """
                     }
