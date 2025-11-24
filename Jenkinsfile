@@ -7,16 +7,19 @@ kind: Pod
 spec:
   containers:
   - name: node
-    image: node:20-alpine    # ✔ FIXED Node version
+    image: node:20-alpine
     command: ["cat"]
     tty: true
+
   - name: docker
-    image: docker:dind
+    image: docker:24.0.2-dind
     securityContext:
       privileged: true
     tty: true
+
   - name: jnlp
-    image: jenkins/inbound-agent:3309.v27b9314fd1a4-1
+    image: jenkins/inbound-agent:latest
+    args: ['\$(JENKINS_SECRET)', '\$(JENKINS_NAME)']
     tty: true
 """
         }
@@ -79,6 +82,7 @@ spec:
         stage('Build Docker Image') {
             steps {
                 container('docker') {
+                    sh 'dockerd-entrypoint.sh & sleep 10'
                     script {
                         def tag = "${env.BUILD_NUMBER}"
                         sh "docker build -t ${DOCKER_IMAGE}:${tag} ."
