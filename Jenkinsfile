@@ -6,7 +6,7 @@ apiVersion: v1
 kind: Pod
 spec:
   containers:
-  
+
   - name: node
     image: node:20-alpine
     command: ["cat"]
@@ -18,7 +18,6 @@ spec:
       privileged: true
     tty: true
 
-  # ⭐ NEW CONTAINER for SonarQube (Java + SonarScanner included)
   - name: sonar
     image: sonarsource/sonar-scanner-cli:latest
     command: ["cat"]
@@ -67,15 +66,15 @@ spec:
 
         stage('SonarQube Analysis') {
             steps {
-                container('sonar') {   // ⭐ RUN SONAR IN JAVA CONTAINER
+                container('sonar') {
                     withSonarQubeEnv("${SONARQUBE_ENV}") {
                         sh """
                             sonar-scanner \
-                            -Dsonar.projectKey=Resumebuilder_Aniket_2401115 \
-                            -Dsonar.projectName=Resumebuilder_Aniket_2401115 \
-                            -Dsonar.sources=src \
-                            -Dsonar.host.url=http://sonarqube.imcc.com \
-                            -Dsonar.login=${SONARQUBE_AUTH_TOKEN}
+                              -Dsonar.projectKey=Resumebuilder_Aniket_2401115 \
+                              -Dsonar.projectName=Resumebuilder_Aniket_2401115 \
+                              -Dsonar.sources=src \
+                              -Dsonar.host.url=http://sonarqube.sonarqube.svc.cluster.local:9000 \
+                              -Dsonar.login=${SONARQUBE_AUTH_TOKEN}
                         """
                     }
                 }
@@ -87,7 +86,7 @@ spec:
                 container('docker') {
                     sh 'dockerd-entrypoint.sh & sleep 12'
                     script {
-                        def tag = "${env.BUILD_NUMBER}"
+                        def tag = env.BUILD_NUMBER
                         sh "docker build -t ${DOCKER_IMAGE}:${tag} ."
                         sh "docker tag ${DOCKER_IMAGE}:${tag} ${DOCKER_IMAGE}:latest"
                     }
@@ -111,15 +110,12 @@ spec:
         stage('Deploy') {
             steps {
                 container('docker') {
-                    script {
-                        sh """
-                            docker rm -f resume-builder-container || true
-
-                            docker run -d -p 8080:80 \
-                            --name resume-builder-container \
-                            ${DOCKER_IMAGE}:latest
-                        """
-                    }
+                    sh """
+                        docker rm -f resume-builder-container || true
+                        docker run -d -p 8080:80 \
+                          --name resume-builder-container \
+                          ${DOCKER_IMAGE}:latest
+                    """
                 }
             }
         }
