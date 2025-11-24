@@ -41,19 +41,27 @@ spec:
     stages {
 
         /* ------------------------------------------------------------------ *
-         *  NEW STAGE TO FIND REAL SONARQUBE INTERNAL DNS
+         *  NEW CURL-BASED SONARQUBE DNS TEST (THIS WORKS)
          * ------------------------------------------------------------------ */
         stage('Test SonarQube DNS') {
             steps {
                 container('sonar') {
                     sh """
-                        echo "Testing internal SonarQube DNS names..."
+                        echo 'Testing internal SonarQube URLs...'
 
-                        ping -c 3 sonarqube.sonarqube.svc.cluster.local || true
-                        ping -c 3 sonarqube.default.svc.cluster.local || true
-                        ping -c 3 sonarqube.svc.cluster.local || true
+                        echo '--- Test 1 ---'
+                        curl -I http://sonarqube.sonarqube.svc.cluster.local:9000 || true
 
-                        echo "DNS test finished."
+                        echo '--- Test 2 ---'
+                        curl -I http://sonarqube.default.svc.cluster.local:9000 || true
+
+                        echo '--- Test 3 ---'
+                        curl -I http://sonarqube.svc.cluster.local:9000 || true
+
+                        echo '--- Test 4 ---'
+                        curl -I http://sonarqube:9000 || true
+
+                        echo 'DNS test finished.'
                     """
                 }
             }
@@ -92,7 +100,7 @@ spec:
                               -Dsonar.projectKey=Resumebuilder_Aniket_2401115 \
                               -Dsonar.projectName=Resumebuilder_Aniket_2401115 \
                               -Dsonar.sources=src \
-                              -Dsonar.host.url=http://REPLACE_ME_AFTER_DNS_TEST:9000 \
+                              -Dsonar.host.url=http://REPLACE_AFTER_DNS_TEST:9000 \
                               -Dsonar.login=${SONARQUBE_AUTH_TOKEN}
                         """
                     }
