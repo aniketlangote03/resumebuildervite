@@ -22,7 +22,15 @@ spec:
     image: docker:24.0.2-dind
     securityContext:
       privileged: true
+    command:
+      - dockerd-entrypoint.sh
+    args:
+      - "--host=tcp://0.0.0.0:2376"
+      - "--storage-driver=overlay2"
     tty: true
+    env:
+      - name: DOCKER_TLS_CERTDIR
+        value: ""
 
   - name: sonar
     image: sonarsource/sonar-scanner-cli:latest
@@ -46,6 +54,9 @@ spec:
 
     stages {
 
+        /* ========================
+               CHECKOUT
+        ========================= */
         stage('Checkout') {
             steps {
                 git branch: 'main',
@@ -54,6 +65,9 @@ spec:
             }
         }
 
+        /* ========================
+          INSTALL DEPENDENCIES
+        ========================= */
         stage('Install Dependencies') {
             steps {
                 container('node') {
@@ -62,6 +76,9 @@ spec:
             }
         }
 
+        /* ========================
+                BUILD
+        ========================= */
         stage('Build React App') {
             steps {
                 container('node') {
@@ -70,6 +87,9 @@ spec:
             }
         }
 
+        /* ========================
+             SONARQUBE SCAN
+        ========================= */
         stage('SonarQube Analysis') {
             steps {
                 container('sonar') {
@@ -87,25 +107,54 @@ spec:
             }
         }
 
+        /* ========================
+              BUILD DOCKER IMAGE
+        ========================= */
         stage('Build Docker Image') {
             steps {
                 container('docker') {
-                    sh 'dockerd-entrypoint.sh & sleep 12'
-                    script {
-                        def tag = env.BUILD_NUMBER
-                        sh "docker build -t ${DOCKER_IMAGE}:${tag} ."
-                        sh "docker tag ${DOCKER_IMAGE}:${tag} ${DOCKER_IMAGE}:latest"
+                    withCredentials([usernamePassword(
+                        credentialsId: 'dockerhub-creds',
+                        usernameVariable: 'DH_USER',
+                        passwordVariable: 'DH_PASS'
+                    )]) {
+
+                        sh '''
+                            # Login to avoid Docker Hub rate limits
+                            echo "$DH_PASS" | docker login -u "$DH_USER" --password-stdin
+
+                            echo "Waiting for Docker daemon to be ready..."
+                            until docker info >/dev/null 2>&1; do
+                              sleep 2
+                            done
+                        '''
+
+                        script {
+                            def tag = env.BUILD_NUMBER
+                            sh """
+                                docker build -t ${DOCKER_IMAGE}:${tag} .
+                                docker tag ${DOCKER_IMAGE}:${tag} ${DOCKER_IMAGE}:latest
+                            """
+                        }
                     }
                 }
             }
         }
 
+        /* ========================
+               PUSH TO NEXUS
+        ========================= */
         stage('Push Docker Image to Nexus') {
             steps {
                 container('docker') {
-                    withCredentials([usernamePassword(credentialsId: 'nexus-creds-resumebuilder', usernameVariable: 'NUSER', passwordVariable: 'NPASS')]) {
+                    withCredentials([usernamePassword(
+                        credentialsId: 'nexus-creds-resumebuilder',
+                        usernameVariable: 'NUSER',
+                        passwordVariable: 'NPASS'
+                    )]) {
+
                         sh """
-                            echo $NPASS | docker login nexus.imcc.com:8083 -u $NUSER --password-stdin
+                            echo "$NPASS" | docker login nexus.imcc.com:8083 -u "$NUSER" --password-stdin
                             docker push ${DOCKER_IMAGE}:${env.BUILD_NUMBER}
                             docker push ${DOCKER_IMAGE}:latest
                         """
@@ -114,6 +163,9 @@ spec:
             }
         }
 
+        /* ========================
+                 DEPLOY
+        ========================= */
         stage('Deploy') {
             steps {
                 container('docker') {
