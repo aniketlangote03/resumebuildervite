@@ -6,6 +6,7 @@ apiVersion: v1
 kind: Pod
 spec:
   containers:
+
   - name: node
     image: node:20-alpine
     command: ["cat"]
@@ -19,17 +20,22 @@ spec:
 
   - name: jnlp
     image: jenkins/inbound-agent:latest
-    args: ['\$(JENKINS_SECRET)', '\$(JENKINS_NAME)']
     tty: true
 """
         }
     }
 
     environment {
-        SONARQUBE_ENV = "sonarqube-imcc"
-        SONARQUBE_AUTH_TOKEN = credentials('sonar-token')
+        // ✔ Use YOUR correct SonarQube name
+        SONARQUBE_ENV = "sonarqube-2401115"
 
+        // ✔ Your SonarQube token stored in Jenkins credentials
+        SONARQUBE_AUTH_TOKEN = credentials('sonartoken')
+
+        // ✔ Nexus image path
         DOCKER_IMAGE = "nexus.imcc.com/resumebuilder-2401115/resume-builder-app"
+
+        // ✔ Nexus docker registry URL
         DOCKER_REGISTRY_URL = "http://nexus.imcc.com/repository/resumebuilder-2401115/"
     }
 
@@ -82,9 +88,10 @@ spec:
         stage('Build Docker Image') {
             steps {
                 container('docker') {
-                    sh 'dockerd-entrypoint.sh & sleep 10'
+                    sh 'dockerd-entrypoint.sh & sleep 12'
                     script {
                         def tag = "${env.BUILD_NUMBER}"
+
                         sh "docker build -t ${DOCKER_IMAGE}:${tag} ."
                         sh "docker tag ${DOCKER_IMAGE}:${tag} ${DOCKER_IMAGE}:latest"
                     }
