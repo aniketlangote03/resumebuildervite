@@ -2,17 +2,17 @@ pipeline {
     agent any
 
     tools {
-        nodejs "node20"
+        nodejs "NodeJS18"   // ✔ FIXED — Jenkins has NodeJS18, not node20
     }
 
     environment {
-        // SonarQube Server configured in Jenkins → Manage Jenkins → Configure System
+        // SonarQube server name configured in Jenkins
         SONARQUBE_ENV = "sonarqube-imcc"
 
-        // SonarQube token from Jenkins credentials
+        // SonarQube token stored in Jenkins credentials
         SONARQUBE_AUTH_TOKEN = credentials('sonar-token')
 
-        // Nexus Docker Registry (your NEW repo)
+        // Nexus repository you created: resumebuilder-2401115
         DOCKER_IMAGE = "nexus.imcc.com/resumebuilder-2401115/resume-builder-app"
 
         // Nexus Docker registry URL
@@ -21,9 +21,9 @@ pipeline {
 
     stages {
 
-        //-----------------------------
-        // CHECKOUT GITHUB CODE
-        //-----------------------------
+        // -----------------------------------------------------
+        // 1) CHECKOUT CODE FROM GITHUB
+        // -----------------------------------------------------
         stage('Checkout') {
             steps {
                 git branch: 'main',
@@ -32,27 +32,27 @@ pipeline {
             }
         }
 
-        //-----------------------------
-        // INSTALL NODE MODULES
-        //-----------------------------
+        // -----------------------------------------------------
+        // 2) INSTALL NODE DEPENDENCIES
+        // -----------------------------------------------------
         stage('Install Dependencies') {
             steps {
                 sh 'npm ci || npm install'
             }
         }
 
-        //-----------------------------
-        // BUILD REACT + VITE APP
-        //-----------------------------
+        // -----------------------------------------------------
+        // 3) BUILD VITE PROJECT
+        // -----------------------------------------------------
         stage('Build') {
             steps {
                 sh 'npm run build'
             }
         }
 
-        //-----------------------------
-        // SONARQUBE ANALYSIS
-        //-----------------------------
+        // -----------------------------------------------------
+        // 4) SONARQUBE ANALYSIS
+        // -----------------------------------------------------
         stage('SonarQube Analysis') {
             environment {
                 scannerHome = tool 'sonar-scanner'
@@ -71,9 +71,9 @@ pipeline {
             }
         }
 
-        //-----------------------------
-        // BUILD DOCKER IMAGE
-        //-----------------------------
+        // -----------------------------------------------------
+        // 5) BUILD DOCKER IMAGE
+        // -----------------------------------------------------
         stage('Build Docker Image') {
             steps {
                 script {
@@ -85,9 +85,9 @@ pipeline {
             }
         }
 
-        //-----------------------------
-        // PUSH DOCKER IMAGE TO NEXUS
-        //-----------------------------
+        // -----------------------------------------------------
+        // 6) PUSH DOCKER IMAGE TO NEXUS
+        // -----------------------------------------------------
         stage('Push Docker Image to Nexus') {
             steps {
                 script {
@@ -99,9 +99,9 @@ pipeline {
             }
         }
 
-        //-----------------------------
-        // DEPLOY DOCKER CONTAINER
-        //-----------------------------
+        // -----------------------------------------------------
+        // 7) DEPLOY DOCKER CONTAINER
+        // -----------------------------------------------------
         stage('Deploy') {
             steps {
                 script {
