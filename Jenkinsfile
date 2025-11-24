@@ -13,11 +13,13 @@ spec:
 
   containers:
 
+  # Use Node from DockerHub for predictable pulls
   - name: node
-    image: nexus.imcc.com:8083/library/node:20-alpine
+    image: node:20-alpine
     command: ["cat"]
     tty: true
 
+  # Docker-in-Docker daemon
   - name: docker
     image: docker:24.0.2-dind
     securityContext:
@@ -111,12 +113,19 @@ spec:
         stage('Build Docker Image') {
             steps {
                 container('docker') {
+
+                    // Wait for DinD daemon to start
                     sh '''
-                        echo "Waiting for Docker daemon to be ready..."
-                        until docker info >/dev/null 2>&1; do
-                          sleep 2
+                        echo "Waiting for Docker daemon..."
+                        for i in {1..15}; do
+                            if docker info >/dev/null 2>&1; then
+                                echo "Docker is ready!"
+                                break
+                            fi
+                            sleep 2
                         done
                     '''
+
                     script {
                         def tag = env.BUILD_NUMBER
                         sh """
