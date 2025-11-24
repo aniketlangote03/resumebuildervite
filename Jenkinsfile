@@ -8,18 +8,18 @@ spec:
   hostAliases:
   - ip: "192.168.20.250"
     hostnames:
-    - "sonarqube.imcc.com"
-    - "nexus.imcc.com"
+      - "sonarqube.imcc.com"
+      - "nexus.imcc.com"
 
   containers:
 
   - name: node
-    image: nexus.imcc.com:8083/resumebuilder-2401115/node:20-alpine
+    image: node:20-alpine
     command: ["cat"]
     tty: true
 
   - name: docker
-    image: nexus.imcc.com:8083/resumebuilder-2401115/docker:24.0.2-dind
+    image: docker:24.0.2-dind
     securityContext:
       privileged: true
     tty: true
@@ -40,7 +40,7 @@ spec:
         SONARQUBE_ENV = "sonarqube-2401115"
         SONARQUBE_AUTH_TOKEN = credentials('sonartoken')
 
-        DOCKER_IMAGE = "nexus.imcc.com/resumebuilder-2401115/resume-builder-app"
+        DOCKER_IMAGE = "nexus.imcc.com:8083/resumebuilder-2401115/resume-builder-app"
         DOCKER_REGISTRY_URL = "http://nexus.imcc.com:8083"
     }
 
