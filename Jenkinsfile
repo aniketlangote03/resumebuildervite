@@ -9,6 +9,7 @@ spec:
   - ip: "192.168.20.250"
     hostnames:
     - "sonarqube.imcc.com"
+    - "nexus.imcc.com"
 
   containers:
 
