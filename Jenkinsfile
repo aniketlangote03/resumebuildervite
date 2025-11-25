@@ -19,7 +19,7 @@ spec:
     command: ["cat"]
     tty: true
 
-  # Docker-in-Docker (with insecure registry)
+  # Docker-in-Docker (with correct insecure registry port 8085)
   - name: docker
     image: docker:24.0.2-dind
     securityContext:
@@ -28,7 +28,7 @@ spec:
     args:
       - "--host=tcp://0.0.0.0:2376"
       - "--storage-driver=overlay2"
-      - "--insecure-registry=nexus.imcc.com:8083"
+      - "--insecure-registry=nexus.imcc.com:8085"
     env:
       - name: DOCKER_TLS_CERTDIR
         value: ""
@@ -50,11 +50,15 @@ spec:
         SONARQUBE_ENV        = "sonarqube-2401115"
         SONARQUBE_AUTH_TOKEN = credentials('sonartoken')
 
-        DOCKER_IMAGE = "nexus.imcc.com:8083/resumebuilder-2401115/resume-builder-app"
+        // 🔥 Correct Docker registry URL with port 8085
+        DOCKER_IMAGE = "nexus.imcc.com:8085/resumebuilder-2401115/resume-builder-app"
     }
 
     stages {
 
+        /* ========================
+               CHECKOUT
+        ========================= */
         stage('Checkout') {
             steps {
                 git branch: 'main',
@@ -63,6 +67,9 @@ spec:
             }
         }
 
+        /* ========================
+          INSTALL DEPENDENCIES
+        ========================= */
         stage('Install Dependencies') {
             steps {
                 container('node') {
@@ -71,6 +78,9 @@ spec:
             }
         }
 
+        /* ========================
+             BUILD REACT
+        ========================= */
         stage('Build React App') {
             steps {
                 container('node') {
@@ -79,6 +89,9 @@ spec:
             }
         }
 
+        /* ========================
+           SONARQUBE SCAN
+        ========================= */
         stage('SonarQube Analysis') {
             steps {
                 container('sonar') {
@@ -96,10 +109,14 @@ spec:
             }
         }
 
+        /* ========================
+           BUILD DOCKER IMAGE
+        ========================= */
         stage('Build Docker Image') {
             steps {
                 container('docker') {
 
+                    // Wait for Docker daemon
                     sh '''
                         echo "Waiting for Docker daemon..."
                         for i in {1..20}; do
@@ -122,6 +139,9 @@ spec:
             }
         }
 
+        /* ========================
+            PUSH IMAGE TO NEXUS
+        ========================= */
         stage('Push Docker Image to Nexus') {
             steps {
                 container('docker') {
@@ -132,7 +152,7 @@ spec:
                     )]) {
 
                         sh """
-                            echo '$NPASS' | docker login nexus.imcc.com:8083 -u '$NUSER' --password-stdin
+                            echo "$NPASS" | docker login nexus.imcc.com:8085 -u "$NUSER" --password-stdin
                             docker push ${DOCKER_IMAGE}:${env.BUILD_NUMBER}
                             docker push ${DOCKER_IMAGE}:latest
                         """
@@ -141,6 +161,9 @@ spec:
             }
         }
 
+        /* ========================
+               DEPLOY
+        ========================= */
         stage('Deploy') {
             steps {
                 container('docker') {
