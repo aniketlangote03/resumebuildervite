@@ -19,7 +19,7 @@ spec:
     command: ["cat"]
     tty: true
 
-  # Docker-in-Docker (Correct insecure registry setup)
+  # Docker-in-Docker (with insecure registry)
   - name: docker
     image: docker:24.0.2-dind
     securityContext:
@@ -85,11 +85,11 @@ spec:
                     withSonarQubeEnv("${SONARQUBE_ENV}") {
                         sh """
                             sonar-scanner \
-                                -Dsonar.projectKey=Resumebuilder_Aniket_2401115 \
-                                -Dsonar.projectName=Resumebuilder_Aniket_2401115 \
-                                -Dsonar.sources=src \
-                                -Dsonar.host.url=http://sonarqube.imcc.com \
-                                -Dsonar.token=${SONARQUBE_AUTH_TOKEN}
+                              -Dsonar.projectKey=Resumebuilder_Aniket_2401115 \
+                              -Dsonar.projectName=Resumebuilder_Aniket_2401115 \
+                              -Dsonar.sources=src \
+                              -Dsonar.host.url=http://sonarqube.imcc.com \
+                              -Dsonar.token=${SONARQUBE_AUTH_TOKEN}
                         """
                     }
                 }
@@ -99,6 +99,7 @@ spec:
         stage('Build Docker Image') {
             steps {
                 container('docker') {
+
                     sh '''
                         echo "Waiting for Docker daemon..."
                         for i in {1..20}; do
@@ -124,16 +125,14 @@ spec:
         stage('Push Docker Image to Nexus') {
             steps {
                 container('docker') {
-                    withCredentials([
-                        usernamePassword(
-                            credentialsId: 'nexus-creds-resumebuilder',
-                            usernameVariable: 'NUSER',
-                            passwordVariable: 'NPASS'
-                        )
-                    ]) {
+                    withCredentials([usernamePassword(
+                        credentialsId: 'nexus-creds-resumebuilder',
+                        usernameVariable: 'NUSER',
+                        passwordVariable: 'NPASS'
+                    )]) {
 
                         sh """
-                            echo "$NPASS" | docker login http://nexus.imcc.com:8083 -u "$NUSER" --password-stdin
+                            echo '$NPASS' | docker login nexus.imcc.com:8083 -u '$NUSER' --password-stdin
                             docker push ${DOCKER_IMAGE}:${env.BUILD_NUMBER}
                             docker push ${DOCKER_IMAGE}:latest
                         """
@@ -149,8 +148,8 @@ spec:
                         docker rm -f resume-builder-container || true
 
                         docker run -d -p 8080:80 \
-                            --name resume-builder-container \
-                            ${DOCKER_IMAGE}:latest
+                          --name resume-builder-container \
+                          ${DOCKER_IMAGE}:latest
                     """
                 }
             }
