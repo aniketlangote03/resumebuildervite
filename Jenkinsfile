@@ -97,7 +97,7 @@ spec:
             steps {
                 container('docker') {
 
-                    // Prevent Docker Hub rate limits
+                    // Docker Hub login to avoid 429 rate limits
                     withCredentials([usernamePassword(
                         credentialsId: 'dockerhub-creds',
                         usernameVariable: 'DUSER',
