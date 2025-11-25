@@ -26,6 +26,7 @@ spec:
     args:
       - "--host=tcp://0.0.0.0:2376"
       - "--storage-driver=overlay2"
+      - "--insecure-registry=nexus-service-for-docker-hosted-registry.nexus.svc.cluster.local:8085"
     env:
       - name: DOCKER_TLS_CERTDIR
         value: ""
@@ -47,7 +48,7 @@ spec:
         SONARQUBE_ENV        = "sonarqube-2401115"
         SONARQUBE_AUTH_TOKEN = credentials('sonartoken')
 
-        NEXUS_URL = "nexus-service-for-docker-hosted-registry.nexus.svc.cluster.local:8085"
+        NEXUS_URL    = "nexus-service-for-docker-hosted-registry.nexus.svc.cluster.local:8085"
         DOCKER_IMAGE = "${NEXUS_URL}/my-repository/resume-builder-app"
     }
 
@@ -97,7 +98,7 @@ spec:
             steps {
                 container('docker') {
 
-                    // Docker Hub login to avoid 429 rate limits
+                    // Login to Docker Hub (to avoid 429 pull rate limits)
                     withCredentials([usernamePassword(
                         credentialsId: 'dockerhub-creds',
                         usernameVariable: 'DUSER',
@@ -106,7 +107,7 @@ spec:
 
                         sh '''
                             echo "Waiting for Docker daemon..."
-                            for i in {1..20}; do
+                            for i in {1..30}; do
                                 if docker info >/dev/null 2>&1; then
                                     echo "Docker is ready!"
                                     break
@@ -140,7 +141,7 @@ spec:
                     )]) {
 
                         sh """
-                            echo "$NPASS" | docker login $NEXUS_URL -u "$NUSER" --password-stdin
+                            echo "$NPASS" | docker login ${NEXUS_URL} -u "$NUSER" --password-stdin
                             docker push ${DOCKER_IMAGE}:${BUILD_NUMBER}
                             docker push ${DOCKER_IMAGE}:latest
                         """
