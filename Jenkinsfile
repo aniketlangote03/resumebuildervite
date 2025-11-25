@@ -154,32 +154,9 @@ spec:
             }
         }
 
-        /* -------------------- CREATE IMAGE PULL SECRET ----------------------- */
-
-        stage('Create Image Pull Secret') {
-            steps {
-                container('kubectl') {
-                    withCredentials([usernamePassword(
-                        credentialsId: 'nexus-creds-resumebuilder',
-                        usernameVariable: 'NUSER',
-                        passwordVariable: 'NPASS'
-                    )]) {
-
-                        sh """
-                        kubectl delete secret nexus-docker-secret -n jenkins --ignore-not-found=true
-
-                        kubectl create secret docker-registry nexus-docker-secret \
-                          --docker-server=${NEXUS_URL} \
-                          --docker-username=$NUSER \
-                          --docker-password=$NPASS \
-                          -n jenkins
-                        """
-                    }
-                }
-            }
-        }
-
-        /* ----------------------- DEPLOY TO KUBERNETES ----------------------- */
+        /* ---------------------------------------------------------------- */
+        /* ---------------------  DEPLOY TO K8S STAGE  -------------------- */
+        /* ---------------------------------------------------------------- */
 
         stage('Deploy to Kubernetes') {
             steps {
@@ -238,7 +215,7 @@ EOF
             }
         }
 
-    } // stages end
+    }  // end stages
 
     post {
         success { echo "🚀 Build, Push & Deployment Successful!" }
