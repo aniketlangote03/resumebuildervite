@@ -64,7 +64,7 @@ spec:
         stage('Install Dependencies') {
             steps {
                 container('node') {
-                    sh 'npm install'
+                    sh "npm install"
                 }
             }
         }
@@ -72,7 +72,7 @@ spec:
         stage('Build React App') {
             steps {
                 container('node') {
-                    sh 'npm run build'
+                    sh "npm run build"
                 }
             }
         }
@@ -97,23 +97,34 @@ spec:
             steps {
                 container('docker') {
 
-                    sh '''
-                        echo "Waiting for Docker daemon..."
-                        for i in {1..20}; do
-                            if docker info >/dev/null 2>&1; then
-                                echo "Docker is ready!"
-                                break
-                            fi
-                            sleep 2
-                        done
-                    '''
+                    // Prevent Docker Hub rate limits
+                    withCredentials([usernamePassword(
+                        credentialsId: 'dockerhub-creds',
+                        usernameVariable: 'DUSER',
+                        passwordVariable: 'DPASS'
+                    )]) {
 
-                    script {
-                        def tag = env.BUILD_NUMBER
-                        sh """
-                            docker build -t ${DOCKER_IMAGE}:${tag} .
-                            docker tag ${DOCKER_IMAGE}:${tag} ${DOCKER_IMAGE}:latest
-                        """
+                        sh '''
+                            echo "Waiting for Docker daemon..."
+                            for i in {1..20}; do
+                                if docker info >/dev/null 2>&1; then
+                                    echo "Docker is ready!"
+                                    break
+                                fi
+                                sleep 2
+                            done
+                        '''
+
+                        script {
+                            def tag = env.BUILD_NUMBER
+
+                            sh """
+                                echo "$DPASS" | docker login -u "$DUSER" --password-stdin
+
+                                docker build -t ${DOCKER_IMAGE}:${tag} .
+                                docker tag ${DOCKER_IMAGE}:${tag} ${DOCKER_IMAGE}:latest
+                            """
+                        }
                     }
                 }
             }
