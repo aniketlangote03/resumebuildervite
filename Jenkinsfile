@@ -1,4 +1,5 @@
 pipeline {
+
     agent {
         kubernetes {
             yaml """
@@ -9,17 +10,14 @@ spec:
   - ip: "192.168.20.250"
     hostnames:
       - "sonarqube.imcc.com"
-      - "nexus.imcc.com"
 
   containers:
 
-  # NodeJS Builder
   - name: node
     image: node:20-alpine
     command: ["cat"]
     tty: true
 
-  # Docker-in-Docker (with insecure registry)
   - name: docker
     image: docker:24.0.2-dind
     securityContext:
@@ -28,7 +26,6 @@ spec:
     args:
       - "--host=tcp://0.0.0.0:2376"
       - "--storage-driver=overlay2"
-      - "--insecure-registry=nexus.imcc.com:8083"
     env:
       - name: DOCKER_TLS_CERTDIR
         value: ""
@@ -50,7 +47,8 @@ spec:
         SONARQUBE_ENV        = "sonarqube-2401115"
         SONARQUBE_AUTH_TOKEN = credentials('sonartoken')
 
-        DOCKER_IMAGE = "nexus.imcc.com:8083/resumebuilder-2401115/resume-builder-app"
+        NEXUS_URL = "nexus-service-for-docker-hosted-registry.nexus.svc.cluster.local:8085"
+        DOCKER_IMAGE = "${NEXUS_URL}/my-repository/resume-builder-app"
     }
 
     stages {
@@ -86,7 +84,6 @@ spec:
                         sh """
                             sonar-scanner \
                               -Dsonar.projectKey=Resumebuilder_Aniket_2401115 \
-                              -Dsonar.projectName=Resumebuilder_Aniket_2401115 \
                               -Dsonar.sources=src \
                               -Dsonar.host.url=http://sonarqube.imcc.com \
                               -Dsonar.token=${SONARQUBE_AUTH_TOKEN}
@@ -132,36 +129,18 @@ spec:
                     )]) {
 
                         sh """
-                            echo '$NPASS' | docker login nexus.imcc.com:8083 -u '$NUSER' --password-stdin
-                            docker push ${DOCKER_IMAGE}:${env.BUILD_NUMBER}
+                            echo "$NPASS" | docker login $NEXUS_URL -u "$NUSER" --password-stdin
+                            docker push ${DOCKER_IMAGE}:${BUILD_NUMBER}
                             docker push ${DOCKER_IMAGE}:latest
                         """
                     }
                 }
             }
         }
-
-        stage('Deploy') {
-            steps {
-                container('docker') {
-                    sh """
-                        docker rm -f resume-builder-container || true
-
-                        docker run -d -p 8080:80 \
-                          --name resume-builder-container \
-                          ${DOCKER_IMAGE}:latest
-                    """
-                }
-            }
-        }
     }
 
     post {
-        success {
-            echo "🚀 Deployment successful!"
-        }
-        failure {
-            echo "❌ Pipeline failed — check logs."
-        }
+        success { echo "🚀 Build & Push Successful!" }
+        failure { echo "❌ Pipeline failed — check logs." }
     }
 }
