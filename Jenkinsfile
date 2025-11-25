@@ -19,15 +19,16 @@ spec:
     command: ["cat"]
     tty: true
 
-  # Docker-in-Docker
+  # Docker-in-Docker (FIXED with insecure registry support)
   - name: docker
     image: docker:24.0.2-dind
     securityContext:
       privileged: true
-    command: ["dockerd-entrypoint.sh"]
+    command: ["sh", "-c"]
     args:
-      - "--host=tcp://0.0.0.0:2376"
-      - "--storage-driver=overlay2"
+      - |
+        echo '{"insecure-registries":["nexus.imcc.com:8083"]}' > /etc/docker/daemon.json
+        dockerd-entrypoint.sh --host=tcp://0.0.0.0:2376 --storage-driver=overlay2
     env:
       - name: DOCKER_TLS_CERTDIR
         value: ""
@@ -46,8 +47,8 @@ spec:
     }
 
     environment {
-        SONARQUBE_ENV         = "sonarqube-2401115"
-        SONARQUBE_AUTH_TOKEN  = credentials('sonartoken')
+        SONARQUBE_ENV        = "sonarqube-2401115"
+        SONARQUBE_AUTH_TOKEN = credentials('sonartoken')
 
         DOCKER_IMAGE = "nexus.imcc.com:8083/resumebuilder-2401115/resume-builder-app"
     }
@@ -88,7 +89,7 @@ spec:
         }
 
         /* ========================
-             SONARQUBE SCAN
+           SONARQUBE SCAN
         ========================= */
         stage('SonarQube Analysis') {
             steps {
@@ -149,7 +150,7 @@ spec:
                     )]) {
 
                         sh """
-                            echo "$NPASS" | docker login http://nexus.imcc.com:8083 -u "$NUSER" --password-stdin
+                            echo "$NPASS" | docker login nexus.imcc.com:8083 -u "$NUSER" --password-stdin
                             docker push ${DOCKER_IMAGE}:${env.BUILD_NUMBER}
                             docker push ${DOCKER_IMAGE}:latest
                         """
