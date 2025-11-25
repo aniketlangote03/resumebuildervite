@@ -102,6 +102,7 @@ spec:
         stage('Build Docker Image') {
             steps {
                 container('docker') {
+
                     withCredentials([usernamePassword(
                         credentialsId: 'dockerhub-creds',
                         usernameVariable: 'DUSER',
@@ -156,9 +157,8 @@ spec:
         stage('Deploy to Kubernetes') {
             steps {
                 container('kubectl') {
-
                     sh """
-                    kubectl apply -f resume-builder-k8s.yaml
+                        kubectl apply -f resume-builder-k8s.yaml
                     """
                 }
             }
