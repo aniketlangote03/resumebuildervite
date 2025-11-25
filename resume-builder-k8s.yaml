@@ -19,25 +19,25 @@ spec:
         app: resume-builder-app
     spec:
       imagePullSecrets:
-      - name: nexus-docker-secret
+        - name: nexus-docker-secret
       containers:
-      - name: resume-builder-app
-        image: nexus-service-for-docker-hosted-registry.nexus.svc.cluster.local:8085/my-repository/resume-builder-app:latest
-        imagePullPolicy: Always
-        ports:
-        - containerPort: 80
-        readinessProbe:
-          httpGet:
-            path: /
-            port: 80
-          initialDelaySeconds: 10
-          periodSeconds: 5
-        livenessProbe:
-          httpGet:
-            path: /
-            port: 80
-          initialDelaySeconds: 15
-          periodSeconds: 10
+        - name: resume-builder-app
+          image: nexus-service-for-docker-hosted-registry.nexus.svc.cluster.local:8085/my-repository/resume-builder-app:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 80
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 10
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 15
+            periodSeconds: 10
 ---
 apiVersion: v1
 kind: Service
@@ -62,13 +62,13 @@ metadata:
 spec:
   ingressClassName: nginx
   rules:
-  - host: 2401115.imcc.com
-    http:
-      paths:
-      - path: /
-        pathType: Prefix
-        backend:
-          service:
-            name: resume-builder-service
-            port:
-              number: 80
+    - host: 2401115.imcc.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: resume-builder-service
+                port:
+                  number: 80
