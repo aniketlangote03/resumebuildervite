@@ -37,6 +37,11 @@ spec:
     command: ["cat"]
     tty: true
 
+  - name: kubectl
+    image: bitnami/kubectl:latest
+    command: ["cat"]
+    tty: true
+
   - name: jnlp
     image: jenkins/inbound-agent:latest
     tty: true
@@ -98,7 +103,6 @@ spec:
             steps {
                 container('docker') {
 
-                    // Login to Docker Hub (to avoid 429 pull rate limits)
                     withCredentials([usernamePassword(
                         credentialsId: 'dockerhub-creds',
                         usernameVariable: 'DUSER',
@@ -149,10 +153,72 @@ spec:
                 }
             }
         }
-    }
+
+        /* ---------------------------------------------------------------- */
+        /* ---------------------  DEPLOY TO K8S STAGE  -------------------- */
+        /* ---------------------------------------------------------------- */
+
+        stage('Deploy to Kubernetes') {
+            steps {
+                container('kubectl') {
+
+                    sh """
+                    cat <<EOF > resume-builder-deployment.yml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: resume-builder-app
+  namespace: jenkins
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: resume-builder-app
+  template:
+    metadata:
+      labels:
+        app: resume-builder-app
+    spec:
+      containers:
+        - name: resume-builder-app
+          image: ${DOCKER_IMAGE}:latest
+          ports:
+            - containerPort: 80
+      imagePullSecrets:
+        - name: nexus-docker-secret
+EOF
+                    """
+
+                    sh """
+                    cat <<EOF > resume-builder-service.yml
+apiVersion: v1
+kind: Service
+metadata:
+  name: resume-builder-service
+  namespace: jenkins
+spec:
+  type: NodePort
+  selector:
+    app: resume-builder-app
+  ports:
+    - port: 80
+      targetPort: 80
+      nodePort: 30085
+EOF
+                    """
+
+                    sh """
+                       kubectl apply -f resume-builder-deployment.yml
+                       kubectl apply -f resume-builder-service.yml
+                    """
+                }
+            }
+        }
+
+    }  // end stages
 
     post {
-        success { echo "🚀 Build & Push Successful!" }
+        success { echo "🚀 Build, Push & Deployment Successful!" }
         failure { echo "❌ Pipeline failed — check logs." }
     }
 }
