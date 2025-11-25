@@ -19,16 +19,16 @@ spec:
     command: ["cat"]
     tty: true
 
-  # Docker-in-Docker (FIXED with insecure registry support)
+  # Docker-in-Docker (Correct insecure registry setup)
   - name: docker
     image: docker:24.0.2-dind
     securityContext:
       privileged: true
-    command: ["sh", "-c"]
+    command: ["dockerd-entrypoint.sh"]
     args:
-      - |
-        echo '{"insecure-registries":["nexus.imcc.com:8083"]}' > /etc/docker/daemon.json
-        dockerd-entrypoint.sh --host=tcp://0.0.0.0:2376 --storage-driver=overlay2
+      - "--host=tcp://0.0.0.0:2376"
+      - "--storage-driver=overlay2"
+      - "--insecure-registry=nexus.imcc.com:8083"
     env:
       - name: DOCKER_TLS_CERTDIR
         value: ""
@@ -55,9 +55,6 @@ spec:
 
     stages {
 
-        /* ========================
-               CHECKOUT
-        ========================= */
         stage('Checkout') {
             steps {
                 git branch: 'main',
@@ -66,9 +63,6 @@ spec:
             }
         }
 
-        /* ========================
-          INSTALL DEPENDENCIES
-        ========================= */
         stage('Install Dependencies') {
             steps {
                 container('node') {
@@ -77,9 +71,6 @@ spec:
             }
         }
 
-        /* ========================
-             BUILD REACT
-        ========================= */
         stage('Build React App') {
             steps {
                 container('node') {
@@ -88,33 +79,26 @@ spec:
             }
         }
 
-        /* ========================
-           SONARQUBE SCAN
-        ========================= */
         stage('SonarQube Analysis') {
             steps {
                 container('sonar') {
                     withSonarQubeEnv("${SONARQUBE_ENV}") {
                         sh """
                             sonar-scanner \
-                              -Dsonar.projectKey=Resumebuilder_Aniket_2401115 \
-                              -Dsonar.projectName=Resumebuilder_Aniket_2401115 \
-                              -Dsonar.sources=src \
-                              -Dsonar.host.url=http://sonarqube.imcc.com \
-                              -Dsonar.token=${SONARQUBE_AUTH_TOKEN}
+                                -Dsonar.projectKey=Resumebuilder_Aniket_2401115 \
+                                -Dsonar.projectName=Resumebuilder_Aniket_2401115 \
+                                -Dsonar.sources=src \
+                                -Dsonar.host.url=http://sonarqube.imcc.com \
+                                -Dsonar.token=${SONARQUBE_AUTH_TOKEN}
                         """
                     }
                 }
             }
         }
 
-        /* ========================
-           BUILD DOCKER IMAGE
-        ========================= */
         stage('Build Docker Image') {
             steps {
                 container('docker') {
-
                     sh '''
                         echo "Waiting for Docker daemon..."
                         for i in {1..20}; do
@@ -137,20 +121,19 @@ spec:
             }
         }
 
-        /* ========================
-            PUSH IMAGE TO NEXUS
-        ========================= */
         stage('Push Docker Image to Nexus') {
             steps {
                 container('docker') {
-                    withCredentials([usernamePassword(
-                        credentialsId: 'nexus-creds-resumebuilder',
-                        usernameVariable: 'NUSER',
-                        passwordVariable: 'NPASS'
-                    )]) {
+                    withCredentials([
+                        usernamePassword(
+                            credentialsId: 'nexus-creds-resumebuilder',
+                            usernameVariable: 'NUSER',
+                            passwordVariable: 'NPASS'
+                        )
+                    ]) {
 
                         sh """
-                            echo "$NPASS" | docker login nexus.imcc.com:8083 -u "$NUSER" --password-stdin
+                            echo "$NPASS" | docker login http://nexus.imcc.com:8083 -u "$NUSER" --password-stdin
                             docker push ${DOCKER_IMAGE}:${env.BUILD_NUMBER}
                             docker push ${DOCKER_IMAGE}:latest
                         """
@@ -159,9 +142,6 @@ spec:
             }
         }
 
-        /* ========================
-               DEPLOY
-        ========================= */
         stage('Deploy') {
             steps {
                 container('docker') {
@@ -169,8 +149,8 @@ spec:
                         docker rm -f resume-builder-container || true
 
                         docker run -d -p 8080:80 \
-                          --name resume-builder-container \
-                          ${DOCKER_IMAGE}:latest
+                            --name resume-builder-container \
+                            ${DOCKER_IMAGE}:latest
                     """
                 }
             }
