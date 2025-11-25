@@ -37,6 +37,11 @@ spec:
     command: ["cat"]
     tty: true
 
+  - name: kubectl
+    image: bitnami/kubectl:latest
+    command: ["cat"]
+    tty: true
+
   - name: jnlp
     image: jenkins/inbound-agent:latest
     tty: true
@@ -97,8 +102,6 @@ spec:
         stage('Build Docker Image') {
             steps {
                 container('docker') {
-
-                    // Login to Docker Hub (to avoid 429 pull rate limits)
                     withCredentials([usernamePassword(
                         credentialsId: 'dockerhub-creds',
                         usernameVariable: 'DUSER',
@@ -149,10 +152,21 @@ spec:
                 }
             }
         }
+
+        stage('Deploy to Kubernetes') {
+            steps {
+                container('kubectl') {
+
+                    sh """
+                    kubectl apply -f resume-builder-k8s.yaml
+                    """
+                }
+            }
+        }
     }
 
     post {
-        success { echo "🚀 Build & Push Successful!" }
+        success { echo "🚀 Build, Push & Deploy Successful!" }
         failure { echo "❌ Pipeline failed — check logs." }
     }
 }
