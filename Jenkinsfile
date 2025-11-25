@@ -17,6 +17,9 @@ spec:
     image: node:20-alpine
     command: ["cat"]
     tty: true
+    volumeMounts:
+    - name: workspace-volume
+      mountPath: /home/jenkins/agent
 
   - name: docker
     image: docker:24.0.2-dind
@@ -31,20 +34,49 @@ spec:
       - name: DOCKER_TLS_CERTDIR
         value: ""
     tty: true
+    volumeMounts:
+    - name: workspace-volume
+      mountPath: /home/jenkins/agent
 
   - name: sonar
     image: sonarsource/sonar-scanner-cli:latest
     command: ["cat"]
     tty: true
+    volumeMounts:
+    - name: workspace-volume
+      mountPath: /home/jenkins/agent
 
+  # ✅ kubectl container with shell + kubeconfig
   - name: kubectl
-    image: bitnami/kubectl:latest
-    command: ["cat"]
+    image: bitnami/kubectl:1.30.1-debian-12-r0
+    command: ["sleep"]
+    args: ["infinity"]
     tty: true
+    env:
+    - name: KUBECONFIG
+      value: /kube/config
+    volumeMounts:
+    - name: workspace-volume
+      mountPath: /home/jenkins/agent
+    - name: kubeconfig-secret
+      mountPath: /kube/config
+      subPath: kubeconfig
 
   - name: jnlp
     image: jenkins/inbound-agent:latest
-    tty: true
+    env:
+    - name: JENKINS_AGENT_WORKDIR
+      value: "/home/jenkins/agent"
+    volumeMounts:
+    - name: workspace-volume
+      mountPath: /home/jenkins/agent
+
+  volumes:
+  - name: workspace-volume
+    emptyDir: {}
+  - name: kubeconfig-secret
+    secret:
+      secretName: kubeconfig-secret
 """
         }
     }
@@ -55,6 +87,8 @@ spec:
 
         NEXUS_URL    = "nexus-service-for-docker-hosted-registry.nexus.svc.cluster.local:8085"
         DOCKER_IMAGE = "${NEXUS_URL}/my-repository/resume-builder-app"
+
+        K8S_NAMESPACE = "2401115"
     }
 
     stages {
@@ -102,7 +136,7 @@ spec:
         stage('Build Docker Image') {
             steps {
                 container('docker') {
-
+                    // Login to Docker Hub so base images pull without 429
                     withCredentials([usernamePassword(
                         credentialsId: 'dockerhub-creds',
                         usernameVariable: 'DUSER',
@@ -111,7 +145,7 @@ spec:
 
                         sh '''
                             echo "Waiting for Docker daemon..."
-                            for i in {1..30}; do
+                            for i in {1..20}; do
                                 if docker info >/dev/null 2>&1; then
                                     echo "Docker is ready!"
                                     break
@@ -143,9 +177,8 @@ spec:
                         usernameVariable: 'NUSER',
                         passwordVariable: 'NPASS'
                     )]) {
-
                         sh """
-                            echo "$NPASS" | docker login ${NEXUS_URL} -u "$NUSER" --password-stdin
+                            echo "$NPASS" | docker login $NEXUS_URL -u "$NUSER" --password-stdin
                             docker push ${DOCKER_IMAGE}:${BUILD_NUMBER}
                             docker push ${DOCKER_IMAGE}:latest
                         """
@@ -154,11 +187,23 @@ spec:
             }
         }
 
+        // ✅ NEW: deploy using the YAMLs in your repo
         stage('Deploy to Kubernetes') {
             steps {
                 container('kubectl') {
                     sh """
-                        kubectl apply -f resume-builder-k8s.yaml
+                        echo 'Using kube context:'
+                        kubectl config current-context || kubectl config get-contexts
+
+                        # Ensure namespace exists
+                        kubectl get ns ${K8S_NAMESPACE} || kubectl create ns ${K8S_NAMESPACE}
+
+                        # Apply your manifests (they are in repo root)
+                        kubectl apply -n ${K8S_NAMESPACE} -f resume-builder-deployment.yaml
+                        kubectl apply -n ${K8S_NAMESPACE} -f resume-builder-service.yaml
+
+                        echo 'Pods in namespace ${K8S_NAMESPACE}:'
+                        kubectl get pods -n ${K8S_NAMESPACE}
                     """
                 }
             }
