@@ -13,13 +13,13 @@ spec:
 
   containers:
 
-  # Use Node from DockerHub for predictable pulls
+  # NodeJS Builder
   - name: node
     image: node:20-alpine
     command: ["cat"]
     tty: true
 
-  # Docker-in-Docker daemon
+  # Docker-in-Docker
   - name: docker
     image: docker:24.0.2-dind
     securityContext:
@@ -46,8 +46,8 @@ spec:
     }
 
     environment {
-        SONARQUBE_ENV = "sonarqube-2401115"
-        SONARQUBE_AUTH_TOKEN = credentials('sonartoken')
+        SONARQUBE_ENV         = "sonarqube-2401115"
+        SONARQUBE_AUTH_TOKEN  = credentials('sonartoken')
 
         DOCKER_IMAGE = "nexus.imcc.com:8083/resumebuilder-2401115/resume-builder-app"
     }
@@ -77,7 +77,7 @@ spec:
         }
 
         /* ========================
-                BUILD REACT
+             BUILD REACT
         ========================= */
         stage('Build React App') {
             steps {
@@ -96,11 +96,11 @@ spec:
                     withSonarQubeEnv("${SONARQUBE_ENV}") {
                         sh """
                             sonar-scanner \
-                                -Dsonar.projectKey=Resumebuilder_Aniket_2401115 \
-                                -Dsonar.projectName=Resumebuilder_Aniket_2401115 \
-                                -Dsonar.sources=src \
-                                -Dsonar.host.url=http://sonarqube.imcc.com \
-                                -Dsonar.token=${SONARQUBE_AUTH_TOKEN}
+                              -Dsonar.projectKey=Resumebuilder_Aniket_2401115 \
+                              -Dsonar.projectName=Resumebuilder_Aniket_2401115 \
+                              -Dsonar.sources=src \
+                              -Dsonar.host.url=http://sonarqube.imcc.com \
+                              -Dsonar.token=${SONARQUBE_AUTH_TOKEN}
                         """
                     }
                 }
@@ -108,16 +108,15 @@ spec:
         }
 
         /* ========================
-              BUILD DOCKER IMAGE
+           BUILD DOCKER IMAGE
         ========================= */
         stage('Build Docker Image') {
             steps {
                 container('docker') {
 
-                    // Wait for DinD daemon to start
                     sh '''
                         echo "Waiting for Docker daemon..."
-                        for i in {1..15}; do
+                        for i in {1..20}; do
                             if docker info >/dev/null 2>&1; then
                                 echo "Docker is ready!"
                                 break
@@ -138,7 +137,7 @@ spec:
         }
 
         /* ========================
-               PUSH TO NEXUS
+            PUSH IMAGE TO NEXUS
         ========================= */
         stage('Push Docker Image to Nexus') {
             steps {
@@ -150,7 +149,7 @@ spec:
                     )]) {
 
                         sh """
-                            echo "$NPASS" | docker login nexus.imcc.com:8083 -u "$NUSER" --password-stdin
+                            echo "$NPASS" | docker login http://nexus.imcc.com:8083 -u "$NUSER" --password-stdin
                             docker push ${DOCKER_IMAGE}:${env.BUILD_NUMBER}
                             docker push ${DOCKER_IMAGE}:latest
                         """
@@ -160,7 +159,7 @@ spec:
         }
 
         /* ========================
-                 DEPLOY
+               DEPLOY
         ========================= */
         stage('Deploy') {
             steps {
@@ -169,8 +168,8 @@ spec:
                         docker rm -f resume-builder-container || true
 
                         docker run -d -p 8080:80 \
-                            --name resume-builder-container \
-                            ${DOCKER_IMAGE}:latest
+                          --name resume-builder-container \
+                          ${DOCKER_IMAGE}:latest
                     """
                 }
             }
