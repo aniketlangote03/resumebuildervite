@@ -19,11 +19,10 @@ spec:
         app: resume-builder-app
     spec:
       imagePullSecrets:
-      - name: nexus-secret   # MUST match Jenkins-created secret name
+      - name: regcred   # MUST match Jenkins-created secret name
       containers:
       - name: resume-builder-app
         image: nexus-service-for-docker-hosted-registry.nexus.svc.cluster.local:8085/2401115/resume-builder-app:__BUILD_NUMBER__
-
         ports:
         - containerPort: 80
 ---
