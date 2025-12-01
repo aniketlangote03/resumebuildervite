@@ -48,8 +48,7 @@ spec:
 
   - name: kubectl
     image: bitnami/kubectl:latest
-    command: ["/bin/sh", "-c"]
-    args: ["sleep infinity"]
+    command: ["sleep", "infinity"]
     tty: true
     securityContext:
       runAsUser: 0
@@ -82,13 +81,10 @@ spec:
     }
 
     environment {
-        SONARQUBE_ENV        = "sonarqube-2401115"
-        SONARQUBE_AUTH_TOKEN = credentials('sonartoken-2401115')
-
-        NEXUS_URL     = "nexus-service-for-docker-hosted-registry.nexus.svc.cluster.local:8085"
-        DOCKER_IMAGE  = "${NEXUS_URL}/2401115/resume-builder-app"
-
-        K8S_NAMESPACE = "2401115"
+        SONARQUBE_ENV   = "sonarqube-2401115"
+        NEXUS_URL       = "nexus-service-for-docker-hosted-registry.nexus.svc.cluster.local:8085"
+        DOCKER_IMAGE    = "${NEXUS_URL}/2401115/resume-builder-app"
+        K8S_NAMESPACE   = "2401115"
     }
 
     stages {
@@ -104,7 +100,7 @@ spec:
         stage('Install Dependencies') {
             steps {
                 container('node') {
-                    sh "npm install"
+                    sh 'npm install'
                 }
             }
         }
@@ -112,7 +108,7 @@ spec:
         stage('Build React App') {
             steps {
                 container('node') {
-                    sh "npm run build"
+                    sh 'npm run build'
                 }
             }
         }
@@ -121,13 +117,12 @@ spec:
             steps {
                 container('sonar') {
                     withSonarQubeEnv("${SONARQUBE_ENV}") {
-                        sh """
+                        sh '''
                         sonar-scanner \
                             -Dsonar.projectKey=Resumebuilder_Aniket_2401115 \
                             -Dsonar.sources=src \
-                            -Dsonar.host.url=http://sonarqube.imcc.com \
-                            -Dsonar.token=$SONARQUBE_AUTH_TOKEN
-                        """
+                            -Dsonar.host.url=http://sonarqube.imcc.com
+                        '''
                     }
                 }
             }
@@ -136,13 +131,13 @@ spec:
         stage('Build Docker Image') {
             steps {
                 container('docker') {
-                    withCredentials([usernamePassword(credentialsId: 'dockerhub-creds',
-                        usernameVariable: 'DUSER', passwordVariable: 'DPASS')]) {
-                        sh """
-                        echo "$DPASS" | docker login -u "$DUSER" --password-stdin
-                        docker build -t $DOCKER_IMAGE:$BUILD_NUMBER .
-                        docker tag $DOCKER_IMAGE:$BUILD_NUMBER $DOCKER_IMAGE:latest
-                        """
+                    withCredentials([usernamePassword(credentialsId: 'nexus-creds-resumebuilder',
+                        usernameVariable: 'NUSER', passwordVariable: 'NPASS')]) {
+                        sh '''
+                        echo "$NPASS" | docker login "$NEXUS_URL" -u "$NUSER" --password-stdin
+                        docker build -t '"$DOCKER_IMAGE:$BUILD_NUMBER"' .
+                        docker tag '"$DOCKER_IMAGE:$BUILD_NUMBER"' '"$DOCKER_IMAGE:latest"'
+                        '''
                     }
                 }
             }
@@ -153,11 +148,11 @@ spec:
                 container('docker') {
                     withCredentials([usernamePassword(credentialsId: 'nexus-creds-resumebuilder',
                         usernameVariable: 'NUSER', passwordVariable: 'NPASS')]) {
-                        sh """
-                        echo "$NPASS" | docker login $NEXUS_URL -u "$NUSER" --password-stdin
-                        docker push $DOCKER_IMAGE:$BUILD_NUMBER
-                        docker push $DOCKER_IMAGE:latest
-                        """
+                        sh '''
+                        echo "$NPASS" | docker login "$NEXUS_URL" -u "$NUSER" --password-stdin
+                        docker push '"$DOCKER_IMAGE:$BUILD_NUMBER"'
+                        docker push '"$DOCKER_IMAGE:latest"'
+                        '''
                     }
                 }
             }
@@ -168,18 +163,18 @@ spec:
                 container('kubectl') {
                     withCredentials([usernamePassword(credentialsId: 'nexus-creds-resumebuilder',
                         usernameVariable: 'NUSER', passwordVariable: 'NPASS')]) {
-                        sh """
+                        sh '''
                         kubectl create secret docker-registry regcred \
-                            --docker-server=$NEXUS_URL \
-                            --docker-username=$NUSER \
-                            --docker-password=$NPASS \
+                            --docker-server='"$NEXUS_URL"' \
+                            --docker-username="$NUSER" \
+                            --docker-password="$NPASS" \
                             --docker-email=student@example.com \
-                            -n $K8S_NAMESPACE --dry-run=client -o yaml | kubectl apply -f -
+                            -n '"$K8S_NAMESPACE"' --dry-run=client -o yaml | kubectl apply -f -
 
-                        sed -i 's|__BUILD_NUMBER__|$BUILD_NUMBER|g' resume-builder-k8s.yaml
-                        kubectl apply -n $K8S_NAMESPACE -f resume-builder-k8s.yaml
-                        kubectl get pods -n $K8S_NAMESPACE -o wide
-                        """
+                        sed -i 's|__BUILD_NUMBER__|'"$BUILD_NUMBER"'|g' resume-builder-k8s.yaml
+                        kubectl apply -n '"$K8S_NAMESPACE"' -f resume-builder-k8s.yaml
+                        kubectl get pods -n '"$K8S_NAMESPACE"' -o wide
+                        '''
                     }
                 }
             }
