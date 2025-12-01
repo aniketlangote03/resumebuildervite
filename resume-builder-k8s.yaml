@@ -19,7 +19,7 @@ spec:
         app: resume-builder-app
     spec:
       imagePullSecrets:
-      - name: nexus-secret   # MUST match Jenkins-created secret name
+      - name: nexus-secret
       containers:
       - name: resume-builder-app
         image: 127.0.0.1:30085/2401115/resume-builder-app:latest
@@ -39,12 +39,27 @@ spec:
     - protocol: TCP
       port: 80
       targetPort: 80
-      nodePort: 32015
+      nodePort: 32015     # external NodePort (optional)
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: client-service
+  namespace: "2401115"
+spec:
+  selector:
+    app: client
+  type: NodePort
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 80
+      nodePort: 32000     # external port for browser access
 ---
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: resume-builder-ingress
+  name: app-ingress
   namespace: "2401115"
 spec:
   ingressClassName: nginx
@@ -53,6 +68,13 @@ spec:
     http:
       paths:
       - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: client-service
+            port:
+              number: 80
+      - path: /api
         pathType: Prefix
         backend:
           service:
