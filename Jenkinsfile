@@ -176,7 +176,7 @@ spec:
                             --docker-email=student@example.com \
                             -n $K8S_NAMESPACE --dry-run=client -o yaml | kubectl apply -f -
 
-                        sed -i 's|__BUILD_NUMBER__|'"$BUILD_NUMBER"'|g' resume-builder-k8s.yaml
+                        sed -i 's|__BUILD_NUMBER__|$BUILD_NUMBER|g' resume-builder-k8s.yaml
                         kubectl apply -n $K8S_NAMESPACE -f resume-builder-k8s.yaml
                         kubectl get pods -n $K8S_NAMESPACE -o wide
                         """
