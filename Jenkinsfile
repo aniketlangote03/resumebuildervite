@@ -13,11 +13,15 @@ spec:
 
   containers:
 
+  # Cleaner container to delete old Jenkins pods
   - name: cleaner
     image: bitnami/kubectl:latest
-    command: ["sleep"]
-    args: ["infinity"]
+    command: ["/bin/sh", "-c"]
+    args: ["sleep infinity"]
     tty: true
+    volumeMounts:
+    - name: workspace-volume
+      mountPath: /home/jenkins/agent
 
   - name: node
     image: node:20-alpine
@@ -53,9 +57,16 @@ spec:
       mountPath: /home/jenkins/agent
 
   - name: kubectl
-    image: bitnami/kubectl:latest
-    command: ["cat"]
+    image: bitnami/kubectl:1.30.1-debian-12-r0
+    command: ["/bin/sh", "-c"]
+    args: ["sleep infinity"]
     tty: true
+    volumeMounts:
+    - name: workspace-volume
+      mountPath: /home/jenkins/agent
+    - name: kubeconfig-secret
+      mountPath: /kube/config
+      subPath: kubeconfig
 
   - name: jnlp
     image: jenkins/inbound-agent:latest
@@ -69,7 +80,9 @@ spec:
   volumes:
   - name: workspace-volume
     emptyDir: {}
-
+  - name: kubeconfig-secret
+    secret:
+      secretName: kubeconfig-secret
 """
         }
     }
@@ -86,19 +99,13 @@ spec:
 
     stages {
 
-        // -------------------------
-        // 🧹 NEW: CLEAN OLD AGENT PODS
-        // -------------------------
         stage('Clean Old Jenkins Pods') {
             steps {
                 container('cleaner') {
                     sh """
-                        echo '🔍 Checking old Jenkins pods...'
-
-                        kubectl get pods -n jenkins | grep resumebuilder- | awk '{print \$1}' | \
-                        xargs -I {} kubectl delete pod {} -n jenkins --force --grace-period=0 || true
-
-                        echo '✅ Old pods cleaned. Node is free now.'
+                        echo "🧹 Cleaning old Jenkins pods..."
+                        kubectl get pods -n jenkins | grep resumebuilder | awk '{print \$1}' | xargs -r kubectl delete pod -n jenkins || true
+                        echo "✅ Clean completed"
                     """
                 }
             }
