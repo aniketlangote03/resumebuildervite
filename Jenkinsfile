@@ -48,8 +48,8 @@ spec:
 
   - name: kubectl
     image: bitnami/kubectl:latest
-    command: ["/bin/sh", "-c"]
-    args: ["cat"]
+    command: ["/bin/bash"]
+    args: ["-c", "while true; do sleep 10; done;"]
     tty: true
     volumeMounts:
     - name: workspace-volume
@@ -60,19 +60,13 @@ spec:
 
   - name: jnlp
     image: jenkins/inbound-agent:latest
-    command: ["/bin/sh", "-c"]
-    args: ["mkdir -p /home/jenkins/agent && exec java -jar /usr/share/jenkins/agent.jar -url http://my-jenkins.jenkins.svc.cluster.local:8080 \${JENKINS_SECRET} resumebuilder-2401115-cicd-\${BUILD_NUMBER}"]
     env:
-    - name: JENKINS_AGENT_WORKDIR
-      value: "/home/jenkins/agent"
-    - name: JENKINS_SECRET
-      valueFrom:
-        secretKeyRef:
-          name: jenkins-agent-secret  # You need to create this secret
-          key: secret
+      - name: JENKINS_AGENT_WORKDIR
+        value: "/home/jenkins/agent"
+    tty: true
     volumeMounts:
     - name: workspace-volume
-      mountPath: /home/jenkins/agent
+      mountPath: "/home/jenkins/agent"
 
   volumes:
   - name: workspace-volume
@@ -95,6 +89,19 @@ spec:
     }
 
     stages {
+
+        stage('Clean Old Jenkins Pods') {
+            steps {
+                container('kubectl') {
+                    withEnv(['KUBECONFIG=/kube/config']) {
+                        sh """
+                            echo '🧹 Checking old resumebuilder pods (not deleting automatically now)...'
+                            kubectl get pods -n jenkins | grep resumebuilder || true
+                        """
+                    }
+                }
+            }
+        }
 
         stage('Checkout') {
             steps {
@@ -139,31 +146,20 @@ spec:
         stage('Build Docker Image') {
             steps {
                 container('docker') {
-                    script {
-                        // Wait for Docker daemon to start
+                    withCredentials([usernamePassword(credentialsId: 'dockerhub-creds', usernameVariable: 'DUSER', passwordVariable: 'DPASS')]) {
+
                         sh '''
-                            echo "Waiting for Docker daemon..."
-                            for i in {1..30}; do
-                                if docker info >/dev/null 2>&1; then
-                                    echo "Docker daemon is ready!"
-                                    break
-                                fi
-                                echo "Attempt $i/30: Docker daemon not ready yet..."
+                            for i in {1..20}; do
+                                if docker info >/dev/null 2>&1; then break; fi
                                 sleep 2
                             done
                         '''
-                        
-                        withCredentials([usernamePassword(
-                            credentialsId: 'dockerhub-creds',
-                            usernameVariable: 'DUSER',
-                            passwordVariable: 'DPASS'
-                        )]) {
-                            sh """
-                                echo "\$DPASS" | docker login -u "\$DUSER" --password-stdin
-                                docker build -t ${DOCKER_IMAGE}:${BUILD_NUMBER} .
-                                docker tag ${DOCKER_IMAGE}:${BUILD_NUMBER} ${DOCKER_IMAGE}:latest
-                            """
-                        }
+
+                        sh """
+                            echo "$DPASS" | docker login -u "$DUSER" --password-stdin
+                            docker build -t ${DOCKER_IMAGE}:${BUILD_NUMBER} .
+                            docker tag ${DOCKER_IMAGE}:${BUILD_NUMBER} ${DOCKER_IMAGE}:latest
+                        """
                     }
                 }
             }
@@ -172,13 +168,9 @@ spec:
         stage('Push Docker Image to Nexus') {
             steps {
                 container('docker') {
-                    withCredentials([usernamePassword(
-                        credentialsId: 'nexus-creds-resumebuilder',
-                        usernameVariable: 'NUSER',
-                        passwordVariable: 'NPASS'
-                    )]) {
+                    withCredentials([usernamePassword(credentialsId: 'nexus-creds-resumebuilder', usernameVariable: 'NUSER', passwordVariable: 'NPASS')]) {
                         sh """
-                            echo "\$NPASS" | docker login ${NEXUS_URL} -u "\$NUSER" --password-stdin
+                            echo "$NPASS" | docker login ${NEXUS_URL} -u "$NUSER" --password-stdin
                             docker push ${DOCKER_IMAGE}:${BUILD_NUMBER}
                             docker push ${DOCKER_IMAGE}:latest
                         """
@@ -192,11 +184,8 @@ spec:
                 container('kubectl') {
                     withEnv(['KUBECONFIG=/kube/config']) {
                         sh """
-                            kubectl get ns ${K8S_NAMESPACE} || kubectl create ns ${K8S_NAMESPACE}
-
                             kubectl apply -n ${K8S_NAMESPACE} -f resume-builder-deployment.yaml
                             kubectl apply -n ${K8S_NAMESPACE} -f resume-builder-service.yaml
-
                             kubectl get pods -n ${K8S_NAMESPACE}
                         """
                     }
@@ -206,14 +195,7 @@ spec:
     }
 
     post {
-        always {
-            echo "Build ${currentBuild.result ?: 'SUCCESS'}"
-        }
-        success { 
-            echo "🚀 Build, Push & Deploy Successful!" 
-        }
-        failure { 
-            echo "❌ Pipeline Failed – Check logs" 
-        }
+        success { echo "🚀 Build, Push & Deploy Successful!" }
+        failure { echo "❌ Pipeline Failed – Check logs" }
     }
 }
