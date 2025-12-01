@@ -162,9 +162,14 @@ spec:
                 container('kubectl') {
                     withEnv(['KUBECONFIG=/kube/config']) {
                         sh """
+                          echo "Checking Namespace..."
                           kubectl get ns ${K8S_NAMESPACE} || kubectl create ns ${K8S_NAMESPACE}
+
+                          echo "Deploying App..."
                           kubectl apply -n ${K8S_NAMESPACE} -f resume-builder-deployment.yaml
                           kubectl apply -n ${K8S_NAMESPACE} -f resume-builder-service.yaml
+
+                          echo "Pod Status:"
                           kubectl get pods -n ${K8S_NAMESPACE} -o wide
                         """
                     }
