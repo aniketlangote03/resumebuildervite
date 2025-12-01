@@ -15,7 +15,7 @@ spec:
 
   # Cleaner container to delete old Jenkins pods
   - name: cleaner
-    image: bitnami/kubectl:latest
+    image: bitnami/kubectl:1.30.2
     command: ["/bin/sh", "-c"]
     args: ["sleep infinity"]
     tty: true
@@ -56,8 +56,9 @@ spec:
     - name: workspace-volume
       mountPath: /home/jenkins/agent
 
+  # Kubectl container for deployment
   - name: kubectl
-    image: bitnami/kubectl:1.30.1-debian-12-r0
+    image: bitnami/kubectl:1.30.2
     command: ["/bin/sh", "-c"]
     args: ["sleep infinity"]
     tty: true
