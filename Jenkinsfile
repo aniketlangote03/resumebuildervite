@@ -47,7 +47,7 @@ spec:
       mountPath: /home/jenkins/agent
 
   - name: kubectl
-    image: bitnami/kubectl:1.29
+    image: bitnami/kubectl:latest
     command: ["/bin/sh", "-c"]
     args: ["sleep infinity"]
     tty: true
@@ -79,7 +79,7 @@ spec:
 
     environment {
         SONARQUBE_ENV      = "sonarqube-2401115"
-        SONARQUBE_AUTH_TOKEN = credentials('sonartoken-2401115')   // UPDATED ID
+        SONARQUBE_AUTH_TOKEN = credentials('sonartoken-2401115')
 
         NEXUS_URL    = "nexus-service-for-docker-hosted-registry.nexus.svc.cluster.local:8085"
         DOCKER_IMAGE = "${NEXUS_URL}/my-repository/resume-builder-app"
@@ -139,10 +139,10 @@ spec:
                     withSonarQubeEnv("${SONARQUBE_ENV}") {
                         sh """
                             sonar-scanner \
-                            -Dsonar.projectKey=Resumebuilder_Aniket_2401115 \
-                            -Dsonar.sources=src \
-                            -Dsonar.host.url=http://sonarqube.imcc.com \
-                            -Dsonar.token=${SONARQUBE_AUTH_TOKEN}
+                              -Dsonar.projectKey=Resumebuilder_Aniket_2401115 \
+                              -Dsonar.sources=src \
+                              -Dsonar.host.url=http://sonarqube.imcc.com \
+                              -Dsonar.token=${SONARQUBE_AUTH_TOKEN}
                         """
                     }
                 }
