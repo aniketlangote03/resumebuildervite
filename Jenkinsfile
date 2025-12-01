@@ -46,9 +46,9 @@ spec:
     - name: workspace-volume
       mountPath: /home/jenkins/agent
 
-  # kubectl Container - FIXED IMAGE TAG
+  # kubectl container (correct image)
   - name: kubectl
-    image: bitnami/kubectl:1.29.5  // <--- FIXED to a valid, existing tag
+    image: bitnami/kubectl:latest
     command: ["/bin/sh", "-c"]
     args: ["sleep infinity"]
     tty: true
@@ -134,11 +134,10 @@ spec:
                 container('sonar') {
                     withSonarQubeEnv("${SONARQUBE_ENV}") {
                         sh """
-                            sonar-scanner \\
-                              -Dsonar.projectKey=Resumebuilder_Aniket_2401115 \\
-                              -Dsonar.sources=src \\
-                              -Dsonar.host.url=http://sonarqube.imcc.com \\
-                              -Dsonar.token=${SONARQUBE_AUTH_TOKEN}
+                            sonar-scanner -Dsonar.projectKey=Resumebuilder_Aniket_2401115 \
+                                          -Dsonar.sources=src \
+                                          -Dsonar.host.url=http://sonarqube.imcc.com \
+                                          -Dsonar.token=${SONARQUBE_AUTH_TOKEN}
                         """
                     }
                 }
@@ -148,7 +147,11 @@ spec:
         stage('Build Docker Image') {
             steps {
                 container('docker') {
-                    withCredentials([usernamePassword(credentialsId: 'dockerhub-creds', usernameVariable: 'DUSER', passwordVariable: 'DPASS')]) {
+                    withCredentials([usernamePassword(
+                        credentialsId: 'dockerhub-creds',
+                        usernameVariable: 'DUSER',
+                        passwordVariable: 'DPASS'
+                    )]) {
 
                         sh '''
                             for i in {1..20}; do
@@ -170,7 +173,11 @@ spec:
         stage('Push Docker Image to Nexus') {
             steps {
                 container('docker') {
-                    withCredentials([usernamePassword(credentialsId: 'nexus-creds-resumebuilder', usernameVariable: 'NUSER', passwordVariable: 'NPASS')]) {
+                    withCredentials([usernamePassword(
+                        credentialsId: 'nexus-creds-resumebuilder',
+                        usernameVariable: 'NUSER',
+                        passwordVariable: 'NPASS'
+                    )]) {
                         sh """
                             echo "$NPASS" | docker login ${NEXUS_URL} -u "$NUSER" --password-stdin
                             docker push ${DOCKER_IMAGE}:${BUILD_NUMBER}
@@ -187,11 +194,8 @@ spec:
                     withEnv(['KUBECONFIG=/kube/config']) {
                         sh """
                             kubectl get ns ${K8S_NAMESPACE} || kubectl create ns ${K8S_NAMESPACE}
-                            
-                            # Note: Dynamic tagging logic (sed) is often recommended here 
-                            # if resume-builder-k8s.yaml doesn't use ${BUILD_NUMBER}.
-                            kubectl apply -n ${K8S_NAMESPACE} -f ${K8S_MANIFEST_FILE} 
-                            
+                            kubectl apply -n ${K8S_NAMESPACE} -f resume-builder-deployment.yaml
+                            kubectl apply -n ${K8S_NAMESPACE} -f resume-builder-service.yaml
                             kubectl get pods -n ${K8S_NAMESPACE}
                         """
                     }
