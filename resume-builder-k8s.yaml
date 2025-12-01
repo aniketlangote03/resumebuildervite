@@ -22,7 +22,7 @@ spec:
       - name: regcred   # MUST match Jenkins-created secret name
       containers:
       - name: resume-builder-app
-        image: 127.0.0.1:30085/2401115/resume-builder-app:__BUILD_NUMBER__
+        image: 192.168.20.250:8085/2401115/resume-builder-app:__BUILD_NUMBER__
         ports:
         - containerPort: 80
 ---
