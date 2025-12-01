@@ -47,9 +47,9 @@ spec:
       mountPath: /home/jenkins/agent
 
   - name: kubectl
-    image: bitnami/kubectl:latest
-    command: ["/bin/bash"]
-    args: ["-c", "while true; do sleep 10; done;"]
+    image: lachlanevenson/k8s-kubectl:v1.29.2
+    command: ["/bin/sh", "-c"]
+    args: ["sleep infinity"]
     tty: true
     volumeMounts:
     - name: workspace-volume
@@ -79,7 +79,7 @@ spec:
     }
 
     environment {
-        SONARQUBE_ENV      = "sonarqube-2401115"
+        SONARQUBE_ENV = "sonarqube-2401115"
         SONARQUBE_AUTH_TOKEN = credentials('sonartoken-2401115')
 
         NEXUS_URL    = "nexus-service-for-docker-hosted-registry.nexus.svc.cluster.local:8085"
@@ -89,19 +89,6 @@ spec:
     }
 
     stages {
-
-        stage('Clean Old Jenkins Pods') {
-            steps {
-                container('kubectl') {
-                    withEnv(['KUBECONFIG=/kube/config']) {
-                        sh """
-                            echo '🧹 Checking old resumebuilder pods (not deleting automatically now)...'
-                            kubectl get pods -n jenkins | grep resumebuilder || true
-                        """
-                    }
-                }
-            }
-        }
 
         stage('Checkout') {
             steps {
@@ -147,7 +134,6 @@ spec:
             steps {
                 container('docker') {
                     withCredentials([usernamePassword(credentialsId: 'dockerhub-creds', usernameVariable: 'DUSER', passwordVariable: 'DPASS')]) {
-
                         sh '''
                             for i in {1..20}; do
                                 if docker info >/dev/null 2>&1; then break; fi
