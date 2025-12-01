@@ -48,11 +48,15 @@ spec:
 
   - name: kubectl
     image: bitnami/kubectl:latest
-    command: ["cat"]
+    command: ["/bin/sh", "-c"]
+    args: ["sleep infinity"]
     tty: true
+    securityContext:
+      runAsUser: 0
+    env:
+    - name: KUBECONFIG
+      value: /kube/config
     volumeMounts:
-    - name: workspace-volume
-      mountPath: /home/jenkins/agent
     - name: kubeconfig-secret
       mountPath: /kube/config
       subPath: kubeconfig
@@ -78,11 +82,11 @@ spec:
     }
 
     environment {
-        SONARQUBE_ENV      = "sonarqube-2401115"
+        SONARQUBE_ENV        = "sonarqube-2401115"
         SONARQUBE_AUTH_TOKEN = credentials('sonartoken-2401115')
 
-        NEXUS_URL    = "nexus-service-for-docker-hosted-registry.nexus.svc.cluster.local:8085"
-        DOCKER_IMAGE = "${NEXUS_URL}/my-repository/resume-builder-app"
+        NEXUS_URL     = "nexus-service-for-docker-hosted-registry.nexus.svc.cluster.local:8085"
+        DOCKER_IMAGE  = "${NEXUS_URL}/my-repository/v2/2401115/resume-builder-app"
 
         K8S_NAMESPACE = "2401115"
     }
@@ -118,11 +122,11 @@ spec:
                 container('sonar') {
                     withSonarQubeEnv("${SONARQUBE_ENV}") {
                         sh """
-                          sonar-scanner \\
-                          -Dsonar.projectKey=Resumebuilder_Aniket_2401115 \\
-                          -Dsonar.sources=src \\
-                          -Dsonar.host.url=http://sonarqube.imcc.com \\
-                          -Dsonar.token=${SONARQUBE_AUTH_TOKEN}
+                          sonar-scanner \
+                          -Dsonar.projectKey=Resumebuilder_Aniket_2401115 \
+                          -Dsonar.sources=src \
+                          -Dsonar.host.url=http://sonarqube.imcc.com \
+                          -Dsonar.token=$SONARQUBE_AUTH_TOKEN
                         """
                     }
                 }
@@ -135,8 +139,8 @@ spec:
                     withCredentials([usernamePassword(credentialsId: 'dockerhub-creds', usernameVariable: 'DUSER', passwordVariable: 'DPASS')]) {
                         sh """
                           echo "$DPASS" | docker login -u "$DUSER" --password-stdin
-                          docker build -t ${DOCKER_IMAGE}:${BUILD_NUMBER} .
-                          docker tag ${DOCKER_IMAGE}:${BUILD_NUMBER} ${DOCKER_IMAGE}:latest
+                          docker build -t $DOCKER_IMAGE:$BUILD_NUMBER .
+                          docker tag $DOCKER_IMAGE:$BUILD_NUMBER $DOCKER_IMAGE:latest
                         """
                     }
                 }
@@ -148,9 +152,9 @@ spec:
                 container('docker') {
                     withCredentials([usernamePassword(credentialsId: 'nexus-creds-resumebuilder', usernameVariable: 'NUSER', passwordVariable: 'NPASS')]) {
                         sh """
-                          echo "$NPASS" | docker login ${NEXUS_URL} -u "$NUSER" --password-stdin
-                          docker push ${DOCKER_IMAGE}:${BUILD_NUMBER}
-                          docker push ${DOCKER_IMAGE}:latest
+                          echo "$NPASS" | docker login $NEXUS_URL -u "$NUSER" --password-stdin
+                          docker push $DOCKER_IMAGE:$BUILD_NUMBER
+                          docker push $DOCKER_IMAGE:latest
                         """
                     }
                 }
@@ -160,19 +164,13 @@ spec:
         stage('Deploy to Kubernetes') {
             steps {
                 container('kubectl') {
-                    withEnv(['KUBECONFIG=/kube/config']) {
-                        sh """
-                          echo "Checking Namespace..."
-                          kubectl get ns ${K8S_NAMESPACE} || kubectl create ns ${K8S_NAMESPACE}
+                    sh """
+                      sed -i "s/__BUILD_NUMBER__/$BUILD_NUMBER/g" resume-builder-k8s.yaml
 
-                          echo "Deploying App..."
-                          kubectl apply -n ${K8S_NAMESPACE} -f resume-builder-deployment.yaml
-                          kubectl apply -n ${K8S_NAMESPACE} -f resume-builder-service.yaml
+                      kubectl apply -f resume-builder-k8s.yaml
 
-                          echo "Pod Status:"
-                          kubectl get pods -n ${K8S_NAMESPACE} -o wide
-                        """
-                    }
+                      kubectl get pods -n $K8S_NAMESPACE -o wide
+                    """
                 }
             }
         }

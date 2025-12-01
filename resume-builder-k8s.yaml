@@ -23,8 +23,7 @@ spec:
         - name: nexus-docker-secret
       containers:
         - name: resume-builder-app
-          # Jenkins will replace __BUILD_NUMBER__ dynamically
-          image: nexus-service-for-docker-hosted-registry.nexus.svc.cluster.local:8085/my-repository/2401115/resume-builder-app:__BUILD_NUMBER__
+          image: nexus-service-for-docker-hosted-registry.nexus.svc.cluster.local:8085/my-repository/v2/2401115/resume-builder-app:__BUILD_NUMBER__
           imagePullPolicy: Always
           ports:
             - containerPort: 80
