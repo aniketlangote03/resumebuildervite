@@ -121,13 +121,13 @@ spec:
             steps {
                 container('sonar') {
                     withSonarQubeEnv("${SONARQUBE_ENV}") {
-                        sh """
+                        sh '''
                           sonar-scanner \
                           -Dsonar.projectKey=Resumebuilder_Aniket_2401115 \
                           -Dsonar.sources=src \
                           -Dsonar.host.url=http://sonarqube.imcc.com \
                           -Dsonar.token=$SONARQUBE_AUTH_TOKEN
-                        """
+                        '''
                     }
                 }
             }
@@ -137,11 +137,11 @@ spec:
             steps {
                 container('docker') {
                     withCredentials([usernamePassword(credentialsId: 'dockerhub-creds', usernameVariable: 'DUSER', passwordVariable: 'DPASS')]) {
-                        sh """
+                        sh '''
                           echo "$DPASS" | docker login -u "$DUSER" --password-stdin
                           docker build -t $DOCKER_IMAGE:$BUILD_NUMBER .
                           docker tag $DOCKER_IMAGE:$BUILD_NUMBER $DOCKER_IMAGE:latest
-                        """
+                        '''
                     }
                 }
             }
@@ -151,11 +151,11 @@ spec:
             steps {
                 container('docker') {
                     withCredentials([usernamePassword(credentialsId: 'nexus-creds-resumebuilder', usernameVariable: 'NUSER', passwordVariable: 'NPASS')]) {
-                        sh """
+                        sh '''
                           echo "$NPASS" | docker login $NEXUS_URL -u "$NUSER" --password-stdin
                           docker push $DOCKER_IMAGE:$BUILD_NUMBER
                           docker push $DOCKER_IMAGE:latest
-                        """
+                        '''
                     }
                 }
             }
@@ -165,9 +165,9 @@ spec:
             steps {
                 container('kubectl') {
                     sh """
-                      sed -i "s/__BUILD_NUMBER__/$BUILD_NUMBER/g" resume-builder-k8s.yaml
+                      sed -i 's|__BUILD_NUMBER__|$BUILD_NUMBER|g' resume-builder-k8s.yaml
 
-                      kubectl apply -f resume-builder-k8s.yaml
+                      kubectl apply -n $K8S_NAMESPACE -f resume-builder-k8s.yaml
 
                       kubectl get pods -n $K8S_NAMESPACE -o wide
                     """
