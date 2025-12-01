@@ -31,8 +31,8 @@ spec:
       - "--storage-driver=overlay2"
       - "--insecure-registry=nexus-service-for-docker-hosted-registry.nexus.svc.cluster.local:8085"
     env:
-      - name: DOCKER_TLS_CERTDIR
-        value: ""
+    - name: DOCKER_TLS_CERTDIR
+      value: ""
     tty: true
     volumeMounts:
     - name: workspace-volume
@@ -47,7 +47,7 @@ spec:
       mountPath: /home/jenkins/agent
 
   - name: kubectl
-    image: lachlanevenson/k8s-kubectl:v1.29.2
+    image: bitnami/kubectl:1.30
     command: ["/bin/sh", "-c"]
     args: ["sleep infinity"]
     tty: true
@@ -61,8 +61,8 @@ spec:
   - name: jnlp
     image: jenkins/inbound-agent:latest
     env:
-      - name: JENKINS_AGENT_WORKDIR
-        value: "/home/jenkins/agent"
+    - name: JENKINS_AGENT_WORKDIR
+      value: "/home/jenkins/agent"
     tty: true
     volumeMounts:
     - name: workspace-volume
@@ -79,7 +79,7 @@ spec:
     }
 
     environment {
-        SONARQUBE_ENV = "sonarqube-2401115"
+        SONARQUBE_ENV      = "sonarqube-2401115"
         SONARQUBE_AUTH_TOKEN = credentials('sonartoken-2401115')
 
         NEXUS_URL    = "nexus-service-for-docker-hosted-registry.nexus.svc.cluster.local:8085"
@@ -119,11 +119,11 @@ spec:
                 container('sonar') {
                     withSonarQubeEnv("${SONARQUBE_ENV}") {
                         sh """
-                            sonar-scanner \\
-                              -Dsonar.projectKey=Resumebuilder_Aniket_2401115 \\
-                              -Dsonar.sources=src \\
-                              -Dsonar.host.url=http://sonarqube.imcc.com \\
-                              -Dsonar.token=${SONARQUBE_AUTH_TOKEN}
+                          sonar-scanner \\
+                          -Dsonar.projectKey=Resumebuilder_Aniket_2401115 \\
+                          -Dsonar.sources=src \\
+                          -Dsonar.host.url=http://sonarqube.imcc.com \\
+                          -Dsonar.token=${SONARQUBE_AUTH_TOKEN}
                         """
                     }
                 }
@@ -134,17 +134,10 @@ spec:
             steps {
                 container('docker') {
                     withCredentials([usernamePassword(credentialsId: 'dockerhub-creds', usernameVariable: 'DUSER', passwordVariable: 'DPASS')]) {
-                        sh '''
-                            for i in {1..20}; do
-                                if docker info >/dev/null 2>&1; then break; fi
-                                sleep 2
-                            done
-                        '''
-
                         sh """
-                            echo "$DPASS" | docker login -u "$DUSER" --password-stdin
-                            docker build -t ${DOCKER_IMAGE}:${BUILD_NUMBER} .
-                            docker tag ${DOCKER_IMAGE}:${BUILD_NUMBER} ${DOCKER_IMAGE}:latest
+                          echo "$DPASS" | docker login -u "$DUSER" --password-stdin
+                          docker build -t ${DOCKER_IMAGE}:${BUILD_NUMBER} .
+                          docker tag ${DOCKER_IMAGE}:${BUILD_NUMBER} ${DOCKER_IMAGE}:latest
                         """
                     }
                 }
@@ -156,9 +149,9 @@ spec:
                 container('docker') {
                     withCredentials([usernamePassword(credentialsId: 'nexus-creds-resumebuilder', usernameVariable: 'NUSER', passwordVariable: 'NPASS')]) {
                         sh """
-                            echo "$NPASS" | docker login ${NEXUS_URL} -u "$NUSER" --password-stdin
-                            docker push ${DOCKER_IMAGE}:${BUILD_NUMBER}
-                            docker push ${DOCKER_IMAGE}:latest
+                          echo "$NPASS" | docker login ${NEXUS_URL} -u "$NUSER" --password-stdin
+                          docker push ${DOCKER_IMAGE}:${BUILD_NUMBER}
+                          docker push ${DOCKER_IMAGE}:latest
                         """
                     }
                 }
@@ -170,9 +163,9 @@ spec:
                 container('kubectl') {
                     withEnv(['KUBECONFIG=/kube/config']) {
                         sh """
-                            kubectl apply -n ${K8S_NAMESPACE} -f resume-builder-deployment.yaml
-                            kubectl apply -n ${K8S_NAMESPACE} -f resume-builder-service.yaml
-                            kubectl get pods -n ${K8S_NAMESPACE}
+                          kubectl apply -n ${K8S_NAMESPACE} -f resume-builder-deployment.yaml
+                          kubectl apply -n ${K8S_NAMESPACE} -f resume-builder-service.yaml
+                          kubectl get pods -n ${K8S_NAMESPACE}
                         """
                     }
                 }
