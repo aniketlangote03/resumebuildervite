@@ -86,7 +86,7 @@ spec:
         SONARQUBE_AUTH_TOKEN = credentials('sonartoken-2401115')
 
         NEXUS_URL     = "nexus-service-for-docker-hosted-registry.nexus.svc.cluster.local:8085"
-        DOCKER_IMAGE  = "${NEXUS_URL}/my-repository/v2/2401115/resume-builder-app"
+        DOCKER_IMAGE  = "${NEXUS_URL}/2401115/resume-builder-app"
 
         K8S_NAMESPACE = "2401115"
     }
