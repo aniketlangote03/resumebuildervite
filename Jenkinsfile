@@ -47,7 +47,7 @@ spec:
       mountPath: /home/jenkins/agent
 
   - name: kubectl
-    image: bitnami/kubectl:1.30
+    image: bitnami/kubectl:latest
     command: ["/bin/sh", "-c"]
     args: ["sleep infinity"]
     tty: true
