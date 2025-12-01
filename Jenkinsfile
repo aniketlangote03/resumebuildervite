@@ -15,7 +15,7 @@ spec:
 
   # Cleaner container to delete old Jenkins pods
   - name: cleaner
-    image: bitnami/kubectl:1.30.2
+    image: bitnami/kubectl:latest
     command: ["/bin/sh", "-c"]
     args: ["sleep infinity"]
     tty: true
@@ -58,16 +58,13 @@ spec:
 
   # Kubectl container for deployment
   - name: kubectl
-    image: bitnami/kubectl:1.30.2
+    image: bitnami/kubectl:1.30.1-debian-12-r0
     command: ["/bin/sh", "-c"]
     args: ["sleep infinity"]
     tty: true
     volumeMounts:
     - name: workspace-volume
       mountPath: /home/jenkins/agent
-    - name: kubeconfig-secret
-      mountPath: /kube/config
-      subPath: kubeconfig
 
   - name: jnlp
     image: jenkins/inbound-agent:latest
@@ -81,9 +78,6 @@ spec:
   volumes:
   - name: workspace-volume
     emptyDir: {}
-  - name: kubeconfig-secret
-    secret:
-      secretName: kubeconfig-secret
 """
         }
     }
@@ -100,11 +94,12 @@ spec:
 
     stages {
 
+        // ----- CLEAN OLD JENKINS PODS -----
         stage('Clean Old Jenkins Pods') {
             steps {
                 container('cleaner') {
                     sh """
-                        echo "🧹 Cleaning old Jenkins pods..."
+                        echo "🧹 Cleaning old Jenkins agent pods..."
                         kubectl get pods -n jenkins | grep resumebuilder | awk '{print \$1}' | xargs -r kubectl delete pod -n jenkins || true
                         echo "✅ Clean completed"
                     """
