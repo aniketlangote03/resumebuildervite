@@ -1,13 +1,14 @@
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: "2401115"
+  name: 2401115
+
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: resume-builder-app
-  namespace: "2401115"
+  namespace: 2401115
 spec:
   replicas: 1
   selector:
@@ -19,16 +20,15 @@ spec:
         app: resume-builder-app
     spec:
       imagePullSecrets:
-        - name: nexus-docker-secret   # make sure secret exists
+        - name: nexus-docker-secret
       containers:
         - name: resume-builder-app
-          # FIXED: Using a placeholder tag (Build number will be substituted by Jenkins)
-          image: nexus-service-for-docker-hosted-registry.nexus.svc.cluster.local:8085/my-repository/resume-builder-app:__BUILD_NUMBER__ 
+          # Jenkins will replace __BUILD_NUMBER__ dynamically
+          image: nexus-service-for-docker-hosted-registry.nexus.svc.cluster.local:8085/my-repository/2401115/resume-builder-app:__BUILD_NUMBER__
           imagePullPolicy: Always
           ports:
             - containerPort: 80
 
-          # Health checks
           readinessProbe:
             httpGet:
               path: /
@@ -56,7 +56,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: resume-builder-service
-  namespace: "2401115"
+  namespace: 2401115
 spec:
   selector:
     app: resume-builder-app
@@ -72,7 +72,7 @@ apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: resume-builder-ingress
-  namespace: "2401115"
+  namespace: 2401115
   annotations:
     nginx.ingress.kubernetes.io/rewrite-target: /
 spec:
