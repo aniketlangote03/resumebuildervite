@@ -6,57 +6,53 @@ apiVersion: v1
 kind: Pod
 spec:
   containers:
-  - name: sonar-scanner
-    image: sonarsource/sonar-scanner-cli
-    command:
-    - cat
+  - name: docker
+    image: docker:24.0.2-dind
+    securityContext:
+      privileged: true
+    env:
+    - name: DOCKER_TLS_CERTDIR
+      value: ""
     tty: true
+
+  - name: sonar
+    image: sonarsource/sonar-scanner-cli:latest
+    command: ["cat"]
+    tty: true
+
   - name: kubectl
     image: bitnami/kubectl:latest
-    command:
-    - cat
+    command: ["sleep", "infinity"]
     tty: true
-    securityContext:
-      runAsUser: 0
-      readOnlyRootFilesystem: false
     env:
     - name: KUBECONFIG
-      value: /kube/config        
+      value: /kube/config
     volumeMounts:
     - name: kubeconfig-secret
       mountPath: /kube/config
       subPath: kubeconfig
-  - name: dind
-    image: docker:dind
-    securityContext:
-      privileged: true  # Needed to run Docker daemon
-    env:
-    - name: DOCKER_TLS_CERTDIR
-      value: ""  # Disable TLS for simplicity
-    volumeMounts:
-    - name: docker-config
-      mountPath: /etc/docker/daemon.json
-      subPath: daemon.json  # Mount the file directly here
+
+  - name: jnlp
+    image: jenkins/inbound-agent:latest
+    tty: true
+
   volumes:
-  - name: docker-config
-    configMap:
-      name: docker-daemon-config
   - name: kubeconfig-secret
     secret:
       secretName: kubeconfig-secret
 '''
         }
     }
-    
-    
+
     stages {
-        stage('Build Docker Image') {
+
+        stage('Build Image') {
             steps {
-                container('dind') {
+                container('docker') {
                     sh '''
-                        sleep 15
-                        docker build -t resume-builder-app:latest .
-                        docker image ls
+                    sleep 10
+                    docker build -t resume-builder-app:latest .
+                    docker images
                     '''
                 }
             }
@@ -64,52 +60,47 @@ spec:
 
         stage('SonarQube Analysis') {
             steps {
-                container('sonar-scanner') {
-                     withCredentials([string(credentialsId: 'sonar-token-2401115', variable: 'SONAR_TOKEN')]) {
-                        sh '''
-                            sonar-scanner \
-                                -Dsonar.projectKey=Resumebuilder_Aniket_2401115s \
-                                -Dsonar.host.url=http://my-sonarqube-sonarqube.sonarqube.svc.cluster.local:9000 \
-                                -Dsonar.login=$SONAR_TOKEN \
-                        '''
+                container('sonar') {
+                    withCredentials([string(credentialsId: 'sonar-token-2401115', variable: 'SONAR_TOKEN')]) {
+                        sh """
+                        sonar-scanner \
+                          -Dsonar.projectKey=Resumebuilder_Aniket_2401115 \
+                          -Dsonar.sources=src \
+                          -Dsonar.host.url=http://sonarqube.imcc.com \
+                          -Dsonar.token=$SONAR_TOKEN
+                        """
                     }
                 }
             }
         }
-        stage('Login to Docker Registry') {
+
+        stage('Login & Push to Nexus') {
             steps {
-                container('dind') {
-                    sh 'docker --version'
-                    sh 'sleep 10'
-                    sh 'docker login nexus-service-for-docker-hosted-registry.nexus.svc.cluster.local:8085 -u admin -p Changeme@2025'
+                container('docker') {
+                    sh '''
+                    docker login nexus-service-for-docker-hosted-registry.nexus.svc.cluster.local:8085 -u student -p Changeme@2025
+                    docker tag resume-builder-app:latest nexus-service-for-docker-hosted-registry.nexus.svc.cluster.local:8085/2401115/resume-builder-app:latest
+                    docker push nexus-service-for-docker-hosted-registry.nexus.svc.cluster.local:8085/2401115/resume-builder-app:latest
+                    '''
                 }
             }
         }
-        stage('Build - Tag - Push') {
-            steps {
-                container('dind') {
-                    sh 'docker tag resume-builder-app:latest nexus-service-for-docker-hosted-registry.nexus.svc.cluster.local:8085/2401115-project/resume-builder-app:latest'
-                    sh 'docker push nexus-service-for-docker-hosted-registry.nexus.svc.cluster.local:8085/2401115-project/resume-builder-app:latest'
-                    sh 'docker pull nexus-service-for-docker-hosted-registry.nexus.svc.cluster.local:8085/2401115-project/resume-builder-app:latest'
-                    sh 'docker image ls'
-                }
-            }
-        }
-        
-        stage('Deploy AI Application') {
+
+        stage('Deploy to Kubernetes') {
             steps {
                 container('kubectl') {
-                    script {
-                            sh '''
-                                # Apply all resources in deployment YAML
-                                kubectl apply -f resume-builder-k8s.yaml
-
-                                # Wait for rollout
-                                kubectl rollout status deployment/resume-builder-app -n 2401115
-                            '''
-                    }
+                    sh '''
+                    kubectl apply -f resume-builder-k8s.yaml -n 2401115
+                    kubectl rollout status deployment/resume-builder-app -n 2401115
+                    kubectl get pods -n 2401115 -o wide
+                    '''
                 }
             }
         }
+    }
+
+    post {
+        success { echo "🎉 Deployment Successful!" }
+        failure { echo "❌ Pipeline Failed" }
     }
 }
