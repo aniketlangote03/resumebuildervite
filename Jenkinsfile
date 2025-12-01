@@ -46,9 +46,8 @@ spec:
     - name: workspace-volume
       mountPath: /home/jenkins/agent
 
-  # kubectl container
   - name: kubectl
-    image: bitnami/kubectl:latest
+    image: bitnami/kubectl:1.29
     command: ["/bin/sh", "-c"]
     args: ["sleep infinity"]
     tty: true
@@ -80,7 +79,7 @@ spec:
 
     environment {
         SONARQUBE_ENV      = "sonarqube-2401115"
-        SONARQUBE_AUTH_TOKEN = credentials('sonartoken')
+        SONARQUBE_AUTH_TOKEN = credentials('sonartoken-2401115')   // UPDATED ID
 
         NEXUS_URL    = "nexus-service-for-docker-hosted-registry.nexus.svc.cluster.local:8085"
         DOCKER_IMAGE = "${NEXUS_URL}/my-repository/resume-builder-app"
@@ -96,8 +95,6 @@ spec:
                     withEnv(['KUBECONFIG=/kube/config']) {
                         sh """
                             echo "🧹 Cleaning old Jenkins pods..."
-                            sleep 5
-                            
                             PODS=\$(kubectl get pods -n jenkins | grep resumebuilder || true)
 
                             if [ -n "\$PODS" ]; then
@@ -142,10 +139,10 @@ spec:
                     withSonarQubeEnv("${SONARQUBE_ENV}") {
                         sh """
                             sonar-scanner \
-                              -Dsonar.projectKey=Resumebuilder_Aniket_2401115 \
-                              -Dsonar.sources=src \
-                              -Dsonar.host.url=http://sonarqube.imcc.com \
-                              -Dsonar.token=${SONARQUBE_AUTH_TOKEN}
+                            -Dsonar.projectKey=Resumebuilder_Aniket_2401115 \
+                            -Dsonar.sources=src \
+                            -Dsonar.host.url=http://sonarqube.imcc.com \
+                            -Dsonar.token=${SONARQUBE_AUTH_TOKEN}
                         """
                     }
                 }
@@ -186,6 +183,7 @@ spec:
                         usernameVariable: 'NUSER',
                         passwordVariable: 'NPASS'
                     )]) {
+
                         sh """
                             echo "$NPASS" | docker login ${NEXUS_URL} -u "$NUSER" --password-stdin
                             docker push ${DOCKER_IMAGE}:${BUILD_NUMBER}
