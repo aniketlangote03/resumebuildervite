@@ -46,7 +46,7 @@ spec:
     - name: workspace-volume
       mountPath: /home/jenkins/agent
 
-  # kubectl container (correct image)
+  # kubectl container
   - name: kubectl
     image: bitnami/kubectl:latest
     command: ["/bin/sh", "-c"]
@@ -86,7 +86,6 @@ spec:
         DOCKER_IMAGE = "${NEXUS_URL}/my-repository/resume-builder-app"
 
         K8S_NAMESPACE = "2401115"
-        K8S_MANIFEST_FILE = "resume-builder-k8s.yaml"
     }
 
     stages {
@@ -97,8 +96,16 @@ spec:
                     withEnv(['KUBECONFIG=/kube/config']) {
                         sh """
                             echo "🧹 Cleaning old Jenkins pods..."
-                            kubectl get pods -n jenkins | grep resumebuilder | awk '{print \$1}' | xargs -r kubectl delete pod -n jenkins || true
-                            echo "✅ Cleanup done"
+                            sleep 5
+                            
+                            PODS=\$(kubectl get pods -n jenkins | grep resumebuilder || true)
+
+                            if [ -n "\$PODS" ]; then
+                                echo "\$PODS" | awk '{print \$1}' | xargs -r kubectl delete pod -n jenkins --force --grace-period=0
+                                echo "✔ Deleted old pods"
+                            else
+                                echo "⚠ No resumebuilder pods found to delete"
+                            fi
                         """
                     }
                 }
@@ -134,10 +141,11 @@ spec:
                 container('sonar') {
                     withSonarQubeEnv("${SONARQUBE_ENV}") {
                         sh """
-                            sonar-scanner -Dsonar.projectKey=Resumebuilder_Aniket_2401115 \
-                                          -Dsonar.sources=src \
-                                          -Dsonar.host.url=http://sonarqube.imcc.com \
-                                          -Dsonar.token=${SONARQUBE_AUTH_TOKEN}
+                            sonar-scanner \
+                              -Dsonar.projectKey=Resumebuilder_Aniket_2401115 \
+                              -Dsonar.sources=src \
+                              -Dsonar.host.url=http://sonarqube.imcc.com \
+                              -Dsonar.token=${SONARQUBE_AUTH_TOKEN}
                         """
                     }
                 }
@@ -194,8 +202,10 @@ spec:
                     withEnv(['KUBECONFIG=/kube/config']) {
                         sh """
                             kubectl get ns ${K8S_NAMESPACE} || kubectl create ns ${K8S_NAMESPACE}
+
                             kubectl apply -n ${K8S_NAMESPACE} -f resume-builder-deployment.yaml
                             kubectl apply -n ${K8S_NAMESPACE} -f resume-builder-service.yaml
+
                             kubectl get pods -n ${K8S_NAMESPACE}
                         """
                     }
