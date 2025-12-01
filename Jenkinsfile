@@ -48,8 +48,8 @@ spec:
 
   - name: kubectl
     image: bitnami/kubectl:latest
-    command: ["/bin/bash", "-c"]
-    args: ["sleep infinity"]
+    command: ["/bin/sh", "-c"]
+    args: ["cat"]
     tty: true
     volumeMounts:
     - name: workspace-volume
@@ -60,9 +60,16 @@ spec:
 
   - name: jnlp
     image: jenkins/inbound-agent:latest
+    command: ["/bin/sh", "-c"]
+    args: ["mkdir -p /home/jenkins/agent && exec java -jar /usr/share/jenkins/agent.jar -url http://my-jenkins.jenkins.svc.cluster.local:8080 \${JENKINS_SECRET} resumebuilder-2401115-cicd-\${BUILD_NUMBER}"]
     env:
     - name: JENKINS_AGENT_WORKDIR
       value: "/home/jenkins/agent"
+    - name: JENKINS_SECRET
+      valueFrom:
+        secretKeyRef:
+          name: jenkins-agent-secret  # You need to create this secret
+          key: secret
     volumeMounts:
     - name: workspace-volume
       mountPath: /home/jenkins/agent
@@ -78,32 +85,16 @@ spec:
     }
 
     environment {
-        SONARQUBE_ENV = "sonarqube-2401115"
+        SONARQUBE_ENV      = "sonarqube-2401115"
         SONARQUBE_AUTH_TOKEN = credentials('sonartoken-2401115')
-        NEXUS_URL = "nexus-service-for-docker-hosted-registry.nexus.svc.cluster.local:8085"
+
+        NEXUS_URL    = "nexus-service-for-docker-hosted-registry.nexus.svc.cluster.local:8085"
         DOCKER_IMAGE = "${NEXUS_URL}/my-repository/resume-builder-app"
+
         K8S_NAMESPACE = "2401115"
     }
 
     stages {
-
-        stage('Clean Old Jenkins Pods') {
-            steps {
-                container('kubectl') {
-                    withEnv(['KUBECONFIG=/kube/config']) {
-                        sh '''
-                            echo "Cleaning old Jenkins pods..."
-                            PODS=$(kubectl get pods -n jenkins | grep resumebuilder || true)
-                            if [ -n "$PODS" ]; then
-                                echo "$PODS" | awk '{print $1}' | xargs -r kubectl delete pod -n jenkins --force --grace-period=0
-                            else
-                                echo "No pods to delete"
-                            fi
-                        '''
-                    }
-                }
-            }
-        }
 
         stage('Checkout') {
             steps {
@@ -114,11 +105,19 @@ spec:
         }
 
         stage('Install Dependencies') {
-            steps { container('node') { sh "npm install" } }
+            steps {
+                container('node') {
+                    sh "npm install"
+                }
+            }
         }
 
         stage('Build React App') {
-            steps { container('node') { sh "npm run build" } }
+            steps {
+                container('node') {
+                    sh "npm run build"
+                }
+            }
         }
 
         stage('SonarQube Analysis') {
@@ -126,10 +125,10 @@ spec:
                 container('sonar') {
                     withSonarQubeEnv("${SONARQUBE_ENV}") {
                         sh """
-                            sonar-scanner \
-                              -Dsonar.projectKey=Resumebuilder_Aniket_2401115 \
-                              -Dsonar.sources=src \
-                              -Dsonar.host.url=http://sonarqube.imcc.com \
+                            sonar-scanner \\
+                              -Dsonar.projectKey=Resumebuilder_Aniket_2401115 \\
+                              -Dsonar.sources=src \\
+                              -Dsonar.host.url=http://sonarqube.imcc.com \\
                               -Dsonar.token=${SONARQUBE_AUTH_TOKEN}
                         """
                     }
@@ -140,15 +139,31 @@ spec:
         stage('Build Docker Image') {
             steps {
                 container('docker') {
-                    withCredentials([usernamePassword(credentialsId: 'dockerhub-creds', usernameVariable: 'DUSER', passwordVariable: 'DPASS')]) {
+                    script {
+                        // Wait for Docker daemon to start
                         sh '''
-                            for i in {1..20}; do if docker info >/dev/null 2>&1; then break; fi; sleep 2; done
+                            echo "Waiting for Docker daemon..."
+                            for i in {1..30}; do
+                                if docker info >/dev/null 2>&1; then
+                                    echo "Docker daemon is ready!"
+                                    break
+                                fi
+                                echo "Attempt $i/30: Docker daemon not ready yet..."
+                                sleep 2
+                            done
                         '''
-                        sh """
-                            echo "$DPASS" | docker login -u "$DUSER" --password-stdin
-                            docker build -t ${DOCKER_IMAGE}:${BUILD_NUMBER} .
-                            docker tag ${DOCKER_IMAGE}:${BUILD_NUMBER} ${DOCKER_IMAGE}:latest
-                        """
+                        
+                        withCredentials([usernamePassword(
+                            credentialsId: 'dockerhub-creds',
+                            usernameVariable: 'DUSER',
+                            passwordVariable: 'DPASS'
+                        )]) {
+                            sh """
+                                echo "\$DPASS" | docker login -u "\$DUSER" --password-stdin
+                                docker build -t ${DOCKER_IMAGE}:${BUILD_NUMBER} .
+                                docker tag ${DOCKER_IMAGE}:${BUILD_NUMBER} ${DOCKER_IMAGE}:latest
+                            """
+                        }
                     }
                 }
             }
@@ -157,9 +172,13 @@ spec:
         stage('Push Docker Image to Nexus') {
             steps {
                 container('docker') {
-                    withCredentials([usernamePassword(credentialsId: 'nexus-creds-resumebuilder', usernameVariable: 'NUSER', passwordVariable: 'NPASS')]) {
+                    withCredentials([usernamePassword(
+                        credentialsId: 'nexus-creds-resumebuilder',
+                        usernameVariable: 'NUSER',
+                        passwordVariable: 'NPASS'
+                    )]) {
                         sh """
-                            echo "$NPASS" | docker login ${NEXUS_URL} -u "$NUSER" --password-stdin
+                            echo "\$NPASS" | docker login ${NEXUS_URL} -u "\$NUSER" --password-stdin
                             docker push ${DOCKER_IMAGE}:${BUILD_NUMBER}
                             docker push ${DOCKER_IMAGE}:latest
                         """
@@ -174,8 +193,10 @@ spec:
                     withEnv(['KUBECONFIG=/kube/config']) {
                         sh """
                             kubectl get ns ${K8S_NAMESPACE} || kubectl create ns ${K8S_NAMESPACE}
+
                             kubectl apply -n ${K8S_NAMESPACE} -f resume-builder-deployment.yaml
                             kubectl apply -n ${K8S_NAMESPACE} -f resume-builder-service.yaml
+
                             kubectl get pods -n ${K8S_NAMESPACE}
                         """
                     }
@@ -185,7 +206,14 @@ spec:
     }
 
     post {
-        success { echo "🚀 SUCCESS!" }
-        failure { echo "❌ Pipeline Failed" }
+        always {
+            echo "Build ${currentBuild.result ?: 'SUCCESS'}"
+        }
+        success { 
+            echo "🚀 Build, Push & Deploy Successful!" 
+        }
+        failure { 
+            echo "❌ Pipeline Failed – Check logs" 
+        }
     }
 }
