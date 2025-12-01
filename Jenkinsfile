@@ -13,19 +13,6 @@ spec:
 
   containers:
 
-  # Cleaner Container
-  - name: cleaner
-    image: bitnami/kubectl:1.29.6
-    command: ["/bin/sh", "-c"]
-    args: ["sleep infinity"]
-    tty: true
-    volumeMounts:
-    - name: workspace-volume
-      mountPath: /home/jenkins/agent
-    - name: kubeconfig-secret
-      mountPath: /kube/config
-      subPath: kubeconfig
-
   - name: node
     image: node:20-alpine
     command: ["cat"]
@@ -59,7 +46,7 @@ spec:
     - name: workspace-volume
       mountPath: /home/jenkins/agent
 
-  # Kubectl Container
+  # kubectl Container (Used for both clean up and deployment)
   - name: kubectl
     image: bitnami/kubectl:1.29.6
     command: ["/bin/sh", "-c"]
@@ -99,6 +86,7 @@ spec:
         DOCKER_IMAGE = "${NEXUS_URL}/my-repository/resume-builder-app"
 
         K8S_NAMESPACE = "2401115"
+        K8S_MANIFEST_FILE = "resume-builder-k8s.yaml"
     }
 
     stages {
@@ -146,10 +134,10 @@ spec:
                 container('sonar') {
                     withSonarQubeEnv("${SONARQUBE_ENV}") {
                         sh """
-                            sonar-scanner \
-                              -Dsonar.projectKey=Resumebuilder_Aniket_2401115 \
-                              -Dsonar.sources=src \
-                              -Dsonar.host.url=http://sonarqube.imcc.com \
+                            sonar-scanner \\
+                              -Dsonar.projectKey=Resumebuilder_Aniket_2401115 \\
+                              -Dsonar.sources=src \\
+                              -Dsonar.host.url=http://sonarqube.imcc.com \\
                               -Dsonar.token=${SONARQUBE_AUTH_TOKEN}
                         """
                     }
@@ -169,13 +157,11 @@ spec:
                             done
                         '''
 
-                        script {
-                            sh """
-                                echo "$DPASS" | docker login -u "$DUSER" --password-stdin
-                                docker build -t ${DOCKER_IMAGE}:${BUILD_NUMBER} .
-                                docker tag ${DOCKER_IMAGE}:${BUILD_NUMBER} ${DOCKER_IMAGE}:latest
-                            """
-                        }
+                        sh """
+                            echo "$DPASS" | docker login -u "$DUSER" --password-stdin
+                            docker build -t ${DOCKER_IMAGE}:${BUILD_NUMBER} .
+                            docker tag ${DOCKER_IMAGE}:${BUILD_NUMBER} ${DOCKER_IMAGE}:latest
+                        """
                     }
                 }
             }
@@ -200,8 +186,17 @@ spec:
                 container('kubectl') {
                     withEnv(['KUBECONFIG=/kube/config']) {
                         sh """
+                            echo "⚙️ Preparing Kubernetes manifest..."
+                            
                             kubectl get ns ${K8S_NAMESPACE} || kubectl create ns ${K8S_NAMESPACE}
-                            kubectl apply -n ${K8S_NAMESPACE} -f resume-builder-k8s.yaml
+
+                            # 1. Copy manifest and replace placeholder with current BUILD_NUMBER
+                            cp ${K8S_MANIFEST_FILE} deployment.tmp.yaml
+                            sed -i "s/__BUILD_NUMBER__/${BUILD_NUMBER}/g" deployment.tmp.yaml
+                            
+                            # 2. Apply the dynamically tagged manifest
+                            kubectl apply -n ${K8S_NAMESPACE} -f deployment.tmp.yaml
+                            
                             kubectl get pods -n ${K8S_NAMESPACE}
                         """
                     }

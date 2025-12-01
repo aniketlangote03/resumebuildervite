@@ -22,7 +22,8 @@ spec:
         - name: nexus-docker-secret   # make sure secret exists
       containers:
         - name: resume-builder-app
-          image: nexus-service-for-docker-hosted-registry.nexus.svc.cluster.local:8085/my-repository/resume-builder-app:latest
+          # FIXED: Using a placeholder tag (Build number will be substituted by Jenkins)
+          image: nexus-service-for-docker-hosted-registry.nexus.svc.cluster.local:8085/my-repository/resume-builder-app:__BUILD_NUMBER__ 
           imagePullPolicy: Always
           ports:
             - containerPort: 80
