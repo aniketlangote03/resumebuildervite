@@ -46,9 +46,9 @@ spec:
     - name: workspace-volume
       mountPath: /home/jenkins/agent
 
-  # kubectl Container (Used for both clean up and deployment)
+  # kubectl Container - FIXED IMAGE TAG
   - name: kubectl
-    image: bitnami/kubectl:1.29.6
+    image: bitnami/kubectl:1.29.5  // <--- FIXED to a valid, existing tag
     command: ["/bin/sh", "-c"]
     args: ["sleep infinity"]
     tty: true
@@ -186,16 +186,11 @@ spec:
                 container('kubectl') {
                     withEnv(['KUBECONFIG=/kube/config']) {
                         sh """
-                            echo "⚙️ Preparing Kubernetes manifest..."
-                            
                             kubectl get ns ${K8S_NAMESPACE} || kubectl create ns ${K8S_NAMESPACE}
-
-                            # 1. Copy manifest and replace placeholder with current BUILD_NUMBER
-                            cp ${K8S_MANIFEST_FILE} deployment.tmp.yaml
-                            sed -i "s/__BUILD_NUMBER__/${BUILD_NUMBER}/g" deployment.tmp.yaml
                             
-                            # 2. Apply the dynamically tagged manifest
-                            kubectl apply -n ${K8S_NAMESPACE} -f deployment.tmp.yaml
+                            # Note: Dynamic tagging logic (sed) is often recommended here 
+                            # if resume-builder-k8s.yaml doesn't use ${BUILD_NUMBER}.
+                            kubectl apply -n ${K8S_NAMESPACE} -f ${K8S_MANIFEST_FILE} 
                             
                             kubectl get pods -n ${K8S_NAMESPACE}
                         """
