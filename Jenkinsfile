@@ -47,7 +47,7 @@ spec:
       mountPath: /home/jenkins/agent
 
   - name: kubectl
-    image: bitnami/kubectl:1.30.1-debian-12-r0
+    image: bitnami/kubectl:latest
     command: ["/bin/sh", "-c"]
     args: ["sleep infinity"]
     tty: true
@@ -163,14 +163,9 @@ spec:
                 container('kubectl') {
                     withEnv(['KUBECONFIG=/kube/config']) {
                         sh """
-                          echo "Preparing namespace..."
                           kubectl get ns ${K8S_NAMESPACE} || kubectl create ns ${K8S_NAMESPACE}
-
-                          echo "Deploying resources..."
                           kubectl apply -n ${K8S_NAMESPACE} -f resume-builder-deployment.yaml
                           kubectl apply -n ${K8S_NAMESPACE} -f resume-builder-service.yaml
-
-                          echo "Checking pod status..."
                           kubectl get pods -n ${K8S_NAMESPACE} -o wide
                         """
                     }
