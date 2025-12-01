@@ -13,7 +13,7 @@ spec:
 
   containers:
 
-  # Cleaner container to delete old Jenkins pods
+  # Cleaner container (Kept but not strictly necessary as 'kubectl' is used for cleanup)
   - name: cleaner
     image: bitnami/kubectl:latest
     command: ["/bin/sh", "-c"]
@@ -56,15 +56,17 @@ spec:
     - name: workspace-volume
       mountPath: /home/jenkins/agent
 
-  # Kubectl container for deployment
   - name: kubectl
-    image: bitnami/kubectl:1.30.1-debian-12-r0
+    image: bitnami/kubectl:1.30.2    // <--- CRITICAL FIX APPLIED
     command: ["/bin/sh", "-c"]
     args: ["sleep infinity"]
     tty: true
     volumeMounts:
     - name: workspace-volume
       mountPath: /home/jenkins/agent
+    - name: kubeconfig-secret
+      mountPath: /kube/config
+      subPath: kubeconfig
 
   - name: jnlp
     image: jenkins/inbound-agent:latest
@@ -78,31 +80,36 @@ spec:
   volumes:
   - name: workspace-volume
     emptyDir: {}
+  - name: kubeconfig-secret
+    secret:
+      secretName: kubeconfig-secret
 """
         }
     }
 
     environment {
-        SONARQUBE_ENV        = "sonarqube-2401115"
+        SONARQUBE_ENV      = "sonarqube-2401115"
         SONARQUBE_AUTH_TOKEN = credentials('sonartoken')
 
         NEXUS_URL    = "nexus-service-for-docker-hosted-registry.nexus.svc.cluster.local:8085"
         DOCKER_IMAGE = "${NEXUS_URL}/my-repository/resume-builder-app"
 
         K8S_NAMESPACE = "2401115"
+        K8S_MANIFEST_FILE = "k8s-manifest.yaml" 
     }
 
     stages {
 
-        // ----- CLEAN OLD JENKINS PODS -----
         stage('Clean Old Jenkins Pods') {
             steps {
-                container('cleaner') {
-                    sh """
-                        echo "🧹 Cleaning old Jenkins agent pods..."
-                        kubectl get pods -n jenkins | grep resumebuilder | awk '{print \$1}' | xargs -r kubectl delete pod -n jenkins || true
-                        echo "✅ Clean completed"
-                    """
+                container('kubectl') { 
+                    withEnv(['KUBECONFIG=/kube/config']) { 
+                        sh """
+                            echo "🧹 Cleaning old Jenkins pods..."
+                            kubectl get pods -n jenkins | grep resumebuilder | awk '{print \$1}' | xargs -r kubectl delete pod -n jenkins || true
+                            echo "✅ Clean completed"
+                        """
+                    }
                 }
             }
         }
@@ -136,10 +143,10 @@ spec:
                 container('sonar') {
                     withSonarQubeEnv("${SONARQUBE_ENV}") {
                         sh """
-                            sonar-scanner \
-                              -Dsonar.projectKey=Resumebuilder_Aniket_2401115 \
-                              -Dsonar.sources=src \
-                              -Dsonar.host.url=http://sonarqube.imcc.com \
+                            sonar-scanner \\
+                              -Dsonar.projectKey=Resumebuilder_Aniket_2401115 \\
+                              -Dsonar.sources=src \\
+                              -Dsonar.host.url=http://sonarqube.imcc.com \\
                               -Dsonar.token=${SONARQUBE_AUTH_TOKEN}
                         """
                     }
@@ -157,6 +164,7 @@ spec:
                     )]) {
 
                         sh '''
+                            # Wait for Docker daemon to start
                             for i in {1..20}; do
                                 if docker info >/dev/null 2>&1; then break; fi
                                 sleep 2
@@ -168,7 +176,6 @@ spec:
 
                             sh """
                                 echo "$DPASS" | docker login -u "$DUSER" --password-stdin
-
                                 docker build -t ${DOCKER_IMAGE}:${tag} .
                                 docker tag ${DOCKER_IMAGE}:${tag} ${DOCKER_IMAGE}:latest
                             """
@@ -187,7 +194,7 @@ spec:
                         passwordVariable: 'NPASS'
                     )]) {
                         sh """
-                            echo "$NPASS" | docker login $NEXUS_URL -u "$NUSER" --password-stdin
+                            echo "$NPASS" | docker login ${NEXUS_URL} -u "$NUSER" --password-stdin
                             docker push ${DOCKER_IMAGE}:${BUILD_NUMBER}
                             docker push ${DOCKER_IMAGE}:latest
                         """
@@ -199,14 +206,23 @@ spec:
         stage('Deploy to Kubernetes') {
             steps {
                 container('kubectl') {
-                    sh """
-                        kubectl get ns ${K8S_NAMESPACE} || kubectl create ns ${K8S_NAMESPACE}
+                    withEnv(['KUBECONFIG=/kube/config']) { 
+                        sh """
+                            echo "⚙️ Preparing Kubernetes manifest..."
+                            
+                            # 1. Create NS if it doesn't exist
+                            kubectl get ns ${K8S_NAMESPACE} || kubectl create ns ${K8S_NAMESPACE}
 
-                        kubectl apply -n ${K8S_NAMESPACE} -f resume-builder-deployment.yaml
-                        kubectl apply -n ${K8S_NAMESPACE} -f resume-builder-service.yaml
+                            # 2. Substitute the BUILD_NUMBER into the YAML file
+                            cp ${K8S_MANIFEST_FILE} deployment.tmp.yaml
+                            sed -i "s/__BUILD_NUMBER__/${BUILD_NUMBER}/g" deployment.tmp.yaml
 
-                        kubectl get pods -n ${K8S_NAMESPACE}
-                    """
+                            # 3. Apply the modified manifest
+                            kubectl apply -n ${K8S_NAMESPACE} -f deployment.tmp.yaml
+                            
+                            kubectl get pods -n ${K8S_NAMESPACE}
+                        """
+                    }
                 }
             }
         }
