@@ -22,7 +22,7 @@ spec:
       - name: nexus-secret   # MUST match Jenkins-created secret name
       containers:
       - name: resume-builder-app
-        image: 127.0.0.1:30085/2401115/resume-builder-app:__BUILD_NUMBER__
+        image: 127.0.0.1:30085/2401115/resume-builder-app:latest
         ports:
         - containerPort: 80
 ---
