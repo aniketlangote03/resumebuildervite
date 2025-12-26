@@ -14,7 +14,7 @@ spec:
   strategy:
     type: RollingUpdate
     rollingUpdate:
-      maxUnavailable: 0
+      maxUnavailable: 1
       maxSurge: 1
 
   selector:
@@ -39,22 +39,28 @@ spec:
           ports:
             - containerPort: 80
 
+          # ✅ Graceful shutdown to avoid stuck rollouts
+          lifecycle:
+            preStop:
+              exec:
+                command: ["sh", "-c", "sleep 5"]
+
           # ✅ Readiness probe (controls rollout)
           readinessProbe:
             httpGet:
               path: /
               port: 80
-            initialDelaySeconds: 10
+            initialDelaySeconds: 5
             periodSeconds: 5
             timeoutSeconds: 2
             failureThreshold: 3
 
-          # ✅ Liveness probe (prevents stuck containers)
+          # ✅ Liveness probe (restarts unhealthy containers)
           livenessProbe:
             httpGet:
               path: /
               port: 80
-            initialDelaySeconds: 20
+            initialDelaySeconds: 15
             periodSeconds: 10
             timeoutSeconds: 2
             failureThreshold: 3
