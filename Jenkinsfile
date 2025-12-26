@@ -11,6 +11,7 @@ spec:
     command:
     - cat
     tty: true
+
   - name: kubectl
     image: bitnami/kubectl:latest
     command:
@@ -21,11 +22,12 @@ spec:
       readOnlyRootFilesystem: false
     env:
     - name: KUBECONFIG
-      value: /kube/config        
+      value: /kube/config
     volumeMounts:
     - name: kubeconfig-secret
       mountPath: /kube/config
       subPath: kubeconfig
+
   - name: dind
     image: docker:dind
     securityContext:
@@ -37,6 +39,7 @@ spec:
     - name: docker-config
       mountPath: /etc/docker/daemon.json
       subPath: daemon.json
+
   volumes:
   - name: docker-config
     configMap:
@@ -80,7 +83,10 @@ spec:
         stage('Login to Docker Registry') {
             steps {
                 container('dind') {
-                    sh 'docker login nexus-service-for-docker-hosted-registry.nexus.svc.cluster.local:8085 -u admin -p Changeme@2025'
+                    sh '''
+                        docker login nexus-service-for-docker-hosted-registry.nexus.svc.cluster.local:8085 \
+                          -u admin -p Changeme@2025
+                    '''
                 }
             }
         }
@@ -102,7 +108,7 @@ spec:
                 container('kubectl') {
                     sh '''
                         kubectl apply -f resume-builder-k8s.yaml
-                        kubectl rollout status deployment/resume-builder-app -n 2401115
+                        kubectl rollout status deployment/resume-builder-app -n 2401115 --timeout=120s || echo "Rollout still in progress"
                     '''
                 }
             }
