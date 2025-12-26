@@ -19,12 +19,12 @@ spec:
         app: resume-builder-app
     spec:
       imagePullSecrets:
-      - name: nexus-secret
+        - name: nexus-secret
       containers:
-      - name: resume-builder-app
-        image: 127.0.0.1:30085/2401115/resume-builder-app:latest
-        ports:
-        - containerPort: 80
+        - name: resume-builder-app
+          image: nexus-service-for-docker-hosted-registry.nexus.svc.cluster.local:8085/docker-hosted/resume-builder-app:latest
+          ports:
+            - containerPort: 80
 ---
 apiVersion: v1
 kind: Service
@@ -34,12 +34,10 @@ metadata:
 spec:
   selector:
     app: resume-builder-app
-  type: NodePort
+  type: ClusterIP
   ports:
-    - protocol: TCP
-      port: 80
+    - port: 80
       targetPort: 80
-      nodePort: 32015
 ---
 apiVersion: v1
 kind: Service
@@ -48,36 +46,34 @@ metadata:
   namespace: "2401115"
 spec:
   selector:
-    app: client
-  type: NodePort
+    app: resume-builder-app
+  type: ClusterIP
   ports:
-    - protocol: TCP
-      port: 80
+    - port: 80
       targetPort: 80
-      nodePort: 32010
 ---
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: resume-builder-ingress  # CHANGED: Matches the existing ingress to allow update
+  name: resume-builder-ingress
   namespace: "2401115"
 spec:
   ingressClassName: nginx
   rules:
-  - host: 2401115.imcc.com
-    http:
-      paths:
-      - path: /
-        pathType: Prefix
-        backend:
-          service:
-            name: client-service
-            port:
-              number: 80
-      - path: /api
-        pathType: Prefix
-        backend:
-          service:
-            name: resume-builder-service
-            port:
-              number: 80
+    - host: 2401115.imcc.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: client-service
+                port:
+                  number: 80
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: resume-builder-service
+                port:
+                  number: 80
