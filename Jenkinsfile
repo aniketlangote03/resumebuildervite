@@ -6,50 +6,58 @@ apiVersion: v1
 kind: Pod
 spec:
   containers:
+
   - name: dind
     image: docker:24.0-dind
     securityContext:
       privileged: true
-    env:
-    - name: DOCKER_TLS_CERTDIR
-      value: ""
-    - name: DOCKER_OPTS
-      value: "--insecure-registry=nexus-service-for-docker-hosted-registry.nexus.svc.cluster.local:8085"
     command:
-    - dockerd
+      - dockerd
     args:
-    - "--host=tcp://127.0.0.1:2375"
-    - "--host=unix:///var/run/docker.sock"
-    - "--insecure-registry=nexus-service-for-docker-hosted-registry.nexus.svc.cluster.local:8085"
+      - "--host=tcp://127.0.0.1:2375"
+      - "--host=unix:///var/run/docker.sock"
+      - "--insecure-registry=nexus-service-for-docker-hosted-registry.nexus.svc.cluster.local:8085"
+    env:
+      - name: DOCKER_TLS_CERTDIR
+        value: ""
+    volumeMounts:
+      - name: workspace-volume
+        mountPath: /home/jenkins/agent
 
   - name: kubectl
     image: bitnami/kubectl:latest
     command: ["cat"]
     tty: true
     env:
-    - name: KUBECONFIG
-      value: /kube/config
+      - name: KUBECONFIG
+        value: /kube/config
     volumeMounts:
-    - name: kubeconfig
-      mountPath: /kube/config
-      subPath: kubeconfig
+      - name: kubeconfig
+        mountPath: /kube/config
+        subPath: kubeconfig
+      - name: workspace-volume
+        mountPath: /home/jenkins/agent
 
   - name: sonar
     image: sonarsource/sonar-scanner-cli
     command: ["cat"]
     tty: true
+    volumeMounts:
+      - name: workspace-volume
+        mountPath: /home/jenkins/agent
 
   volumes:
-  - name: kubeconfig
-    secret:
-      secretName: kubeconfig-secret
+    - name: kubeconfig
+      secret:
+        secretName: kubeconfig-secret
+    - name: workspace-volume
+      emptyDir: {}
 """
     }
   }
 
   environment {
     REGISTRY = "nexus-service-for-docker-hosted-registry.nexus.svc.cluster.local:8085"
-    REPO     = "my-repository"
     IMAGE    = "resume-builder-app"
     TAG      = "latest"
   }
@@ -92,13 +100,14 @@ spec:
       steps {
         container("dind") {
           withCredentials([usernamePassword(
-            credentialsId: 'nexus-docker-creds',
+            credentialsId: 'new-nexus-creds',
             usernameVariable: 'NEXUS_USER',
             passwordVariable: 'NEXUS_PASS'
           )]) {
             sh '''
-              echo "$NEXUS_PASS" | docker login ${REGISTRY} \
-                -u "$NEXUS_USER" --password-stdin
+              echo "$NEXUS_PASS" | docker login http://${REGISTRY} \
+                -u "$NEXUS_USER" \
+                --password-stdin
             '''
           }
         }
@@ -109,8 +118,8 @@ spec:
       steps {
         container("dind") {
           sh '''
-            docker tag ${IMAGE}:${TAG} ${REGISTRY}/${REPO}/${IMAGE}:${TAG}
-            docker push ${REGISTRY}/${REPO}/${IMAGE}:${TAG}
+            docker tag ${IMAGE}:${TAG} ${REGISTRY}/${IMAGE}:${TAG}
+            docker push ${REGISTRY}/${IMAGE}:${TAG}
           '''
         }
       }
