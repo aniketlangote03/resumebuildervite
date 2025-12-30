@@ -27,16 +27,9 @@ spec:
       subPath: kubeconfig
 
   - name: dind
-    image: docker:24.0-dind
+    image: docker:dind
     securityContext:
       privileged: true
-    # --- START OF FIX ---
-    # We override the entrypoint to pass the insecure-registry flag
-    command:
-    - dockerd-entrypoint.sh
-    args:
-    - --insecure-registry=nexus-service-for-docker-hosted-registry.nexus.svc.cluster.local:8085
-    # --- END OF FIX ---
     env:
     - name: DOCKER_TLS_CERTDIR
       value: ""
@@ -44,8 +37,6 @@ spec:
     - name: docker-config
       mountPath: /etc/docker/daemon.json
       subPath: daemon.json
-    - name: docker-graph
-      mountPath: /var/lib/docker
 
   volumes:
   - name: docker-config
@@ -54,16 +45,13 @@ spec:
   - name: kubeconfig-secret
     secret:
       secretName: kubeconfig-secret
-  - name: docker-graph
-    emptyDir: {}
 '''
         }
     }
 
     environment {
-        // Double check this URL matches exactly what is in the insecure-registry arg above
         REGISTRY = "nexus-service-for-docker-hosted-registry.nexus.svc.cluster.local:8085"
-        REPO     = "docker-hosted"
+        REPO     = "repository/my-repository"
         IMAGE    = "resume-builder-app"
         TAG      = "latest"
     }
@@ -105,7 +93,6 @@ spec:
                         usernameVariable: 'NEXUS_USER',
                         passwordVariable: 'NEXUS_PASS'
                     )]) {
-                        // Added --password-stdin for security and used the REGISTRY var
                         sh '''
                           echo "$NEXUS_PASS" | docker login ${REGISTRY} \
                             -u "$NEXUS_USER" --password-stdin
@@ -118,7 +105,6 @@ spec:
         stage('Tag & Push Image') {
             steps {
                 container('dind') {
-                    // Note: I updated the target tag to match standard Nexus format: REGISTRY/REPO/IMAGE:TAG
                     sh '''
                         docker tag ${IMAGE}:${TAG} ${REGISTRY}/${REPO}/${IMAGE}:${TAG}
                         docker push ${REGISTRY}/${REPO}/${IMAGE}:${TAG}
