@@ -14,7 +14,7 @@ spec:
   strategy:
     type: RollingUpdate
     rollingUpdate:
-      maxUnavailable: 1
+      maxUnavailable: 0
       maxSurge: 1
 
   selector:
@@ -33,31 +33,27 @@ spec:
 
       containers:
         - name: resume-builder-app
-          image: nexus.imcc.com:8085/my-repository/resume-builder-app:latest
+          image: nexus.imcc.com:8085/repository/my-repository/resume-builder-app:latest
           imagePullPolicy: Always
 
           ports:
             - containerPort: 80
 
-          lifecycle:
-            preStop:
-              exec:
-                command: ["sh", "-c", "sleep 5"]
-
+          # --- HEALTH CHECKS ---
           startupProbe:
             httpGet:
               path: /
               port: 80
             failureThreshold: 30
-            periodSeconds: 2
+            periodSeconds: 3
 
           readinessProbe:
             httpGet:
               path: /
               port: 80
-            initialDelaySeconds: 5
+            initialDelaySeconds: 10
             periodSeconds: 10
-            timeoutSeconds: 2
+            timeoutSeconds: 3
             failureThreshold: 3
 
           livenessProbe:
@@ -66,7 +62,7 @@ spec:
               port: 80
             initialDelaySeconds: 30
             periodSeconds: 15
-            timeoutSeconds: 2
+            timeoutSeconds: 3
             failureThreshold: 3
 
 ---
@@ -80,7 +76,8 @@ spec:
     app: resume-builder-app
   type: ClusterIP
   ports:
-    - port: 80
+    - name: http
+      port: 80
       targetPort: 80
 
 ---
@@ -94,7 +91,8 @@ spec:
     app: resume-builder-app
   type: ClusterIP
   ports:
-    - port: 80
+    - name: http
+      port: 80
       targetPort: 80
 
 ---
@@ -103,6 +101,8 @@ kind: Ingress
 metadata:
   name: resume-builder-ingress
   namespace: "2401115"
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
 spec:
   ingressClassName: nginx
   rules:
@@ -114,12 +114,5 @@ spec:
             backend:
               service:
                 name: client-service
-                port:
-                  number: 80
-          - path: /api
-            pathType: Prefix
-            backend:
-              service:
-                name: resume-builder-service
                 port:
                   number: 80
