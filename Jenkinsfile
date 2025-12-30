@@ -1,13 +1,25 @@
 pipeline {
     agent {
         kubernetes {
-            yaml '''
+            yaml """
 apiVersion: v1
 kind: Pod
 spec:
   containers:
-  - name: sonar-scanner
-    image: sonarsource/sonar-scanner-cli
+
+  - name: docker
+    image: docker:24.0-dind
+    securityContext:
+      privileged: true
+    env:
+    - name: DOCKER_TLS_CERTDIR
+      value: ""
+    volumeMounts:
+    - name: docker-graph
+      mountPath: /var/lib/docker
+
+  - name: sonar
+    image: sonarsource/sonar-scanner-cli:latest
     command: ["cat"]
     tty: true
 
@@ -15,114 +27,116 @@ spec:
     image: bitnami/kubectl:latest
     command: ["cat"]
     tty: true
-    securityContext:
-      runAsUser: 0
-      readOnlyRootFilesystem: false
     env:
     - name: KUBECONFIG
       value: /kube/config
     volumeMounts:
-    - name: kubeconfig-secret
+    - name: kubeconfig
       mountPath: /kube/config
       subPath: kubeconfig
 
-  - name: dind
-    image: docker:dind
-    securityContext:
-      privileged: true
-    env:
-    - name: DOCKER_TLS_CERTDIR
-      value: ""
-    volumeMounts:
-    - name: docker-config
-      mountPath: /etc/docker/daemon.json
-      subPath: daemon.json
-
   volumes:
-  - name: docker-config
-    configMap:
-      name: docker-daemon-config
-  - name: kubeconfig-secret
+  - name: docker-graph
+    emptyDir: {}
+
+  - name: kubeconfig
     secret:
       secretName: kubeconfig-secret
-'''
+"""
         }
     }
 
     environment {
         REGISTRY = "nexus-service-for-docker-hosted-registry.nexus.svc.cluster.local:8085"
-        REPO     = "repository/my-repository"
-        IMAGE    = "resume-builder-app"
-        TAG      = "latest"
+        REPOSITORY = "my-repository"
+        IMAGE = "resume-builder-app"
+        TAG = "latest"
     }
 
     stages {
 
-        stage('Build Docker Image') {
+        stage('Checkout Source') {
             steps {
-                container('dind') {
-                    sh '''
-                        sleep 10
-                        docker build -t ${IMAGE}:${TAG} .
-                        docker images
-                    '''
+                checkout scm
+            }
+        }
+
+        stage('SonarQube Scan') {
+            steps {
+                container('sonar') {
+                    withCredentials([
+                        string(credentialsId: 'sonar-token-2401115', variable: 'SONAR_TOKEN')
+                    ]) {
+                        sh """
+                        sonar-scanner \
+                          -Dsonar.projectKey=Resumebuilder_Aniket_2401115 \
+                          -Dsonar.host.url=http://my-sonarqube-sonarqube.sonarqube.svc.cluster.local:9000 \
+                          -Dsonar.token=$SONAR_TOKEN
+                        """
+                    }
                 }
             }
         }
 
-        stage('SonarQube Analysis') {
+        stage('Build Docker Image') {
             steps {
-                container('sonar-scanner') {
-                    withCredentials([string(credentialsId: 'sonar-token-2401115', variable: 'SONAR_TOKEN')]) {
-                        sh '''
-                          sonar-scanner \
-                            -Dsonar.projectKey=Resumebuilder_Aniket_2401115s \
-                            -Dsonar.host.url=http://my-sonarqube-sonarqube.sonarqube.svc.cluster.local:9000 \
-                            -Dsonar.token=$SONAR_TOKEN
-                        '''
-                    }
+                container('docker') {
+                    sh """
+                        docker build -t ${IMAGE}:${TAG} .
+                        docker images
+                    """
                 }
             }
         }
 
         stage('Login to Nexus') {
             steps {
-                container('dind') {
-                    withCredentials([usernamePassword(
-                        credentialsId: 'nexus-docker-creds',
-                        usernameVariable: 'NEXUS_USER',
-                        passwordVariable: 'NEXUS_PASS'
-                    )]) {
-                        sh '''
-                          echo "$NEXUS_PASS" | docker login ${REGISTRY} \
-                            -u "$NEXUS_USER" --password-stdin
-                        '''
+                container('docker') {
+                    withCredentials([
+                        usernamePassword(
+                            credentialsId: 'nexus-docker-creds',
+                            usernameVariable: 'NEXUS_USER',
+                            passwordVariable: 'NEXUS_PASS'
+                        )
+                    ]) {
+                        sh """
+                        echo "$NEXUS_PASS" | docker login ${REGISTRY} \
+                          -u "$NEXUS_USER" --password-stdin
+                        """
                     }
                 }
             }
         }
 
-        stage('Tag & Push Image') {
+        stage('Push Image to Nexus') {
             steps {
-                container('dind') {
-                    sh '''
-                        docker tag ${IMAGE}:${TAG} ${REGISTRY}/${REPO}/${IMAGE}:${TAG}
-                        docker push ${REGISTRY}/${REPO}/${IMAGE}:${TAG}
-                        docker image ls
-                    '''
+                container('docker') {
+                    sh """
+                        docker tag ${IMAGE}:${TAG} ${REGISTRY}/${REPOSITORY}/${IMAGE}:${TAG}
+                        docker push ${REGISTRY}/${REPOSITORY}/${IMAGE}:${TAG}
+                    """
                 }
             }
         }
 
-        stage('Deploy Application') {
+        stage('Deploy to Kubernetes') {
             steps {
                 container('kubectl') {
-                    sh '''
+                    sh """
                         kubectl apply -f resume-builder-k8s.yaml
                         kubectl rollout status deployment/resume-builder-app -n 2401115 --timeout=180s
-                    '''
+                    """
                 }
             }
+        }
+    }
+
+    post {
+        success {
+            echo "✅ Pipeline completed successfully"
+        }
+        failure {
+            echo "❌ Pipeline failed"
         }
     }
 }
