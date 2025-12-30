@@ -53,7 +53,7 @@ spec:
         NEXUS_REGISTRY = "nexus.nexus.svc.cluster.local:8085"
         NEXUS_REPO     = "my-repository"
         IMAGE_NAME     = "resume-builder-app"
-        IMAGE_TAG      = "latest"
+        IMAGE_TAG      = "${BUILD_NUMBER}"
     }
 
     stages {
@@ -62,8 +62,7 @@ spec:
             steps {
                 container('dind') {
                     sh '''
-                        sleep 10
-                        docker build -t ${IMAGE_NAME}:${IMAGE_TAG} .
+                      docker build -t ${IMAGE_NAME}:${IMAGE_TAG} .
                     '''
                 }
             }
@@ -95,7 +94,7 @@ spec:
                         )
                     ]) {
                         sh '''
-                          echo "$NEXUS_PASS" | docker login $NEXUS_REGISTRY \
+                          echo "$NEXUS_PASS" | docker login ${NEXUS_REGISTRY} \
                             -u "$NEXUS_USER" --password-stdin
                         '''
                     }
@@ -107,10 +106,10 @@ spec:
             steps {
                 container('dind') {
                     sh '''
-                        docker tag ${IMAGE_NAME}:${IMAGE_TAG} \
-                          ${NEXUS_REGISTRY}/${NEXUS_REPO}/${IMAGE_NAME}:${IMAGE_TAG}
+                      docker tag ${IMAGE_NAME}:${IMAGE_TAG} \
+                        ${NEXUS_REGISTRY}/${NEXUS_REPO}/${IMAGE_NAME}:${IMAGE_TAG}
 
-                        docker push ${NEXUS_REGISTRY}/${NEXUS_REPO}/${IMAGE_NAME}:${IMAGE_TAG}
+                      docker push ${NEXUS_REGISTRY}/${NEXUS_REPO}/${IMAGE_NAME}:${IMAGE_TAG}
                     '''
                 }
             }
@@ -120,9 +119,9 @@ spec:
             steps {
                 container('kubectl') {
                     sh '''
-                        kubectl apply -f resume-builder-k8s.yaml
-                        kubectl rollout restart deployment resume-builder-app -n 2401115
-                        kubectl rollout status deployment resume-builder-app -n 2401115 --timeout=180s
+                      kubectl apply -f resume-builder-k8s.yaml
+                      kubectl rollout restart deployment resume-builder-app -n 2401115
+                      kubectl rollout status deployment resume-builder-app -n 2401115 --timeout=180s
                     '''
                 }
             }
