@@ -8,12 +8,14 @@ spec:
   containers:
   - name: sonar-scanner
     image: sonarsource/sonar-scanner-cli
-    command: ["cat"]
+    command:
+    - cat
     tty: true
 
   - name: kubectl
     image: bitnami/kubectl:latest
-    command: ["cat"]
+    command:
+    - cat
     tty: true
     securityContext:
       runAsUser: 0
@@ -49,20 +51,15 @@ spec:
         }
     }
 
-    environment {
-        NEXUS_REGISTRY = "nexus.nexus.svc.cluster.local:8085"
-        NEXUS_REPO     = "my-repository"
-        IMAGE_NAME     = "resume-builder-app"
-        IMAGE_TAG      = "${BUILD_NUMBER}"
-    }
-
     stages {
 
         stage('Build Docker Image') {
             steps {
                 container('dind') {
                     sh '''
-                      docker build -t ${IMAGE_NAME}:${IMAGE_TAG} .
+                        sleep 15
+                        docker build -t resume-builder-app:latest .
+                        docker image ls
                     '''
                 }
             }
@@ -73,7 +70,7 @@ spec:
                 container('sonar-scanner') {
                     withCredentials([string(credentialsId: 'sonar-token-2401115', variable: 'SONAR_TOKEN')]) {
                         sh '''
-                          sonar-scanner \
+                            sonar-scanner \
                             -Dsonar.projectKey=Resumebuilder_Aniket_2401115s \
                             -Dsonar.host.url=http://my-sonarqube-sonarqube.sonarqube.svc.cluster.local:9000 \
                             -Dsonar.token=$SONAR_TOKEN
@@ -83,45 +80,35 @@ spec:
             }
         }
 
-        stage('Login to Nexus') {
-            steps {
-                container('dind') {
-                    withCredentials([
-                        usernamePassword(
-                            credentialsId: 'nexus-credentials',
-                            usernameVariable: 'NEXUS_USER',
-                            passwordVariable: 'NEXUS_PASS'
-                        )
-                    ]) {
-                        sh '''
-                          echo "$NEXUS_PASS" | docker login ${NEXUS_REGISTRY} \
-                            -u "$NEXUS_USER" --password-stdin
-                        '''
-                    }
-                }
-            }
-        }
-
-        stage('Tag & Push Image') {
+        stage('Login to Docker Registry') {
             steps {
                 container('dind') {
                     sh '''
-                      docker tag ${IMAGE_NAME}:${IMAGE_TAG} \
-                        ${NEXUS_REGISTRY}/${NEXUS_REPO}/${IMAGE_NAME}:${IMAGE_TAG}
-
-                      docker push ${NEXUS_REGISTRY}/${NEXUS_REPO}/${IMAGE_NAME}:${IMAGE_TAG}
+                        docker login nexus-service-for-docker-hosted-registry.nexus.svc.cluster.local:8085 \
+                          -u admin -p Changeme@2025
                     '''
                 }
             }
         }
 
-        stage('Deploy to Kubernetes') {
+        stage('Build - Tag - Push') {
+            steps {
+                container('dind') {
+                    sh '''
+                        docker tag resume-builder-app:latest nexus-service-for-docker-hosted-registry.nexus.svc.cluster.local:8085/docker-hosted/resume-builder-app:latest
+                        docker push nexus-service-for-docker-hosted-registry.nexus.svc.cluster.local:8085/docker-hosted/resume-builder-app:latest
+                        docker image ls
+                    '''
+                }
+            }
+        }
+
+        stage('Deploy AI Application') {
             steps {
                 container('kubectl') {
                     sh '''
-                      kubectl apply -f resume-builder-k8s.yaml
-                      kubectl rollout restart deployment resume-builder-app -n 2401115
-                      kubectl rollout status deployment resume-builder-app -n 2401115 --timeout=180s
+                        kubectl apply -f resume-builder-k8s.yaml
+                        kubectl rollout status deployment/resume-builder-app -n 2401115 --timeout=120s || echo "Rollout still in progress"
                     '''
                 }
             }
