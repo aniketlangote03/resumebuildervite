@@ -49,6 +49,13 @@ spec:
         }
     }
 
+    environment {
+        NEXUS_REGISTRY = "nexus.nexus.svc.cluster.local:8085"
+        NEXUS_REPO     = "my-repository"
+        IMAGE_NAME     = "resume-builder-app"
+        IMAGE_TAG      = "latest"
+    }
+
     stages {
 
         stage('Build Docker Image') {
@@ -56,7 +63,7 @@ spec:
                 container('dind') {
                     sh '''
                         sleep 10
-                        docker build -t resume-builder-app:latest .
+                        docker build -t ${IMAGE_NAME}:${IMAGE_TAG} .
                     '''
                 }
             }
@@ -80,13 +87,15 @@ spec:
         stage('Login to Nexus') {
             steps {
                 container('dind') {
-                    withCredentials([usernamePassword(
-                        credentialsId: 'nexus-credentials',
-                        usernameVariable: 'NEXUS_USER',
-                        passwordVariable: 'NEXUS_PASS'
-                    )]) {
+                    withCredentials([
+                        usernamePassword(
+                            credentialsId: 'nexus-credentials',
+                            usernameVariable: 'NEXUS_USER',
+                            passwordVariable: 'NEXUS_PASS'
+                        )
+                    ]) {
                         sh '''
-                          echo "$NEXUS_PASS" | docker login nexus.imcc.com:8085 \
+                          echo "$NEXUS_PASS" | docker login $NEXUS_REGISTRY \
                             -u "$NEXUS_USER" --password-stdin
                         '''
                     }
@@ -98,8 +107,10 @@ spec:
             steps {
                 container('dind') {
                     sh '''
-                        docker tag resume-builder-app:latest nexus.imcc.com:8085/my-repository/resume-builder-app:latest
-                        docker push nexus.imcc.com:8085/my-repository/resume-builder-app:latest
+                        docker tag ${IMAGE_NAME}:${IMAGE_TAG} \
+                          ${NEXUS_REGISTRY}/${NEXUS_REPO}/${IMAGE_NAME}:${IMAGE_TAG}
+
+                        docker push ${NEXUS_REGISTRY}/${NEXUS_REPO}/${IMAGE_NAME}:${IMAGE_TAG}
                     '''
                 }
             }

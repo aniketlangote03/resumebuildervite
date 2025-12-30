@@ -11,10 +11,12 @@ metadata:
 spec:
   replicas: 1
 
+  revisionHistoryLimit: 3
+
   strategy:
     type: RollingUpdate
     rollingUpdate:
-      maxUnavailable: 1
+      maxUnavailable: 0
       maxSurge: 1
 
   selector:
@@ -33,11 +35,12 @@ spec:
 
       containers:
         - name: resume-builder-app
-          image: nexus.imcc.com:8085/my-repository/resume-builder-app:latest
+          image: nexus.nexus.svc.cluster.local:8085/my-repository/resume-builder-app:latest
           imagePullPolicy: Always
 
           ports:
             - containerPort: 80
+              name: http
 
           lifecycle:
             preStop:
@@ -47,14 +50,14 @@ spec:
           startupProbe:
             httpGet:
               path: /
-              port: 80
+              port: http
             failureThreshold: 30
             periodSeconds: 2
 
           readinessProbe:
             httpGet:
               path: /
-              port: 80
+              port: http
             initialDelaySeconds: 5
             periodSeconds: 10
             timeoutSeconds: 2
@@ -63,11 +66,19 @@ spec:
           livenessProbe:
             httpGet:
               path: /
-              port: 80
+              port: http
             initialDelaySeconds: 30
             periodSeconds: 15
             timeoutSeconds: 2
             failureThreshold: 3
+
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "64Mi"
+            limits:
+              cpu: "500m"
+              memory: "256Mi"
 
 ---
 apiVersion: v1
@@ -80,7 +91,8 @@ spec:
     app: resume-builder-app
   type: ClusterIP
   ports:
-    - port: 80
+    - name: http
+      port: 80
       targetPort: 80
 
 ---
@@ -94,7 +106,8 @@ spec:
     app: resume-builder-app
   type: ClusterIP
   ports:
-    - port: 80
+    - name: http
+      port: 80
       targetPort: 80
 
 ---
@@ -103,6 +116,8 @@ kind: Ingress
 metadata:
   name: resume-builder-ingress
   namespace: "2401115"
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
 spec:
   ingressClassName: nginx
   rules:
@@ -114,12 +129,5 @@ spec:
             backend:
               service:
                 name: client-service
-                port:
-                  number: 80
-          - path: /api
-            pathType: Prefix
-            backend:
-              service:
-                name: resume-builder-service
                 port:
                   number: 80
