@@ -3,15 +3,6 @@ kind: Namespace
 metadata:
   name: "2401115"
 ---
-apiVersion: v1
-kind: Secret
-metadata:
-  name: nexus-secret
-  namespace: "2401115"
-type: kubernetes.io/dockerconfigjson
-data:
-  .dockerconfigjson: ewoJImF1dGhzIjogewoJCSJuZXh1cy1zZXJ2aWNlLWZvci1kb2NrZXItaG9zdGVkLXJlZ2lzdHJ5Lm5leHVzLnN2Yy5jbHVzdGVyLmxvY2FsOjgwODUiOiB7CgkJCSJhdXRoIjogIiIKCQl9Cgl9Cn0=
----
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -20,66 +11,64 @@ metadata:
   labels:
     app: resume-builder
 spec:
-  replicas: 2
+  replicas: 1
+
   strategy:
     type: RollingUpdate
     rollingUpdate:
       maxUnavailable: 1
       maxSurge: 1
+
   selector:
     matchLabels:
       app: resume-builder
+
   template:
     metadata:
       labels:
         app: resume-builder
     spec:
-      terminationGracePeriodSeconds: 30
+      terminationGracePeriodSeconds: 10
+
       imagePullSecrets:
         - name: nexus-secret
+
       containers:
         - name: resume-builder
-          image: nexus-service-for-docker-hosted-registry.nexus.svc.cluster.local:8085/repository/my-repository/resume-builder-app:latest
+          image: nexus.imcc.com:8085/my-repository/resume-builder-app:latest
           imagePullPolicy: Always
+
           ports:
             - containerPort: 80
-              name: http
-              protocol: TCP
-          resources:
-            requests:
-              memory: "128Mi"
-              cpu: "100m"
-            limits:
-              memory: "256Mi"
-              cpu: "200m"
+
           lifecycle:
             preStop:
               exec:
                 command: ["sh", "-c", "sleep 5"]
+
           startupProbe:
             httpGet:
               path: /
               port: 80
-            initialDelaySeconds: 5
-            periodSeconds: 5
-            timeoutSeconds: 3
-            failureThreshold: 10
+            failureThreshold: 30
+            periodSeconds: 2
+
           readinessProbe:
             httpGet:
               path: /
               port: 80
             initialDelaySeconds: 5
-            periodSeconds: 5
-            timeoutSeconds: 3
+            periodSeconds: 10
+            timeoutSeconds: 2
             failureThreshold: 3
-            successThreshold: 1
+
           livenessProbe:
             httpGet:
               path: /
               port: 80
             initialDelaySeconds: 30
-            periodSeconds: 10
-            timeoutSeconds: 3
+            periodSeconds: 15
+            timeoutSeconds: 2
             failureThreshold: 3
 ---
 apiVersion: v1
@@ -95,7 +84,6 @@ spec:
     - name: http
       port: 80
       targetPort: 80
-      protocol: TCP
 ---
 apiVersion: networking.k8s.io/v1
 kind: Ingress
@@ -104,13 +92,10 @@ metadata:
   namespace: "2401115"
   annotations:
     nginx.ingress.kubernetes.io/rewrite-target: /
-    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
-    nginx.ingress.kubernetes.io/proxy-read-timeout: "60"
-    nginx.ingress.kubernetes.io/proxy-send-timeout: "60"
 spec:
   ingressClassName: nginx
   rules:
-    - host: "2401115.imcc.com"
+    - host: 2401115.imcc.com
       http:
         paths:
           - path: /
