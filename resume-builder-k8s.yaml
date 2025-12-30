@@ -8,6 +8,8 @@ kind: Deployment
 metadata:
   name: resume-builder-app
   namespace: "2401115"
+  labels:
+    app: resume-builder
 spec:
   replicas: 1
 
@@ -19,12 +21,12 @@ spec:
 
   selector:
     matchLabels:
-      app: resume-builder-app
+      app: resume-builder
 
   template:
     metadata:
       labels:
-        app: resume-builder-app
+        app: resume-builder
     spec:
       terminationGracePeriodSeconds: 10
 
@@ -32,7 +34,7 @@ spec:
         - name: nexus-secret
 
       containers:
-        - name: resume-builder-app
+        - name: resume-builder
           image: nexus.imcc.com:8085/my-repository/resume-builder-app:latest
           imagePullPolicy: Always
 
@@ -68,7 +70,6 @@ spec:
             periodSeconds: 15
             timeoutSeconds: 2
             failureThreshold: 3
-
 ---
 apiVersion: v1
 kind: Service
@@ -76,33 +77,21 @@ metadata:
   name: resume-builder-service
   namespace: "2401115"
 spec:
-  selector:
-    app: resume-builder-app
   type: ClusterIP
-  ports:
-    - port: 80
-      targetPort: 80
-
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: client-service
-  namespace: "2401115"
-spec:
   selector:
-    app: resume-builder-app
-  type: ClusterIP
+    app: resume-builder
   ports:
-    - port: 80
+    - name: http
+      port: 80
       targetPort: 80
-
 ---
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: resume-builder-ingress
   namespace: "2401115"
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
 spec:
   ingressClassName: nginx
   rules:
@@ -110,13 +99,6 @@ spec:
       http:
         paths:
           - path: /
-            pathType: Prefix
-            backend:
-              service:
-                name: client-service
-                port:
-                  number: 80
-          - path: /api
             pathType: Prefix
             backend:
               service:
