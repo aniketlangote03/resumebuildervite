@@ -8,14 +8,12 @@ spec:
   containers:
   - name: sonar-scanner
     image: sonarsource/sonar-scanner-cli
-    command:
-    - cat
+    command: ["cat"]
     tty: true
 
   - name: kubectl
     image: bitnami/kubectl:latest
-    command:
-    - cat
+    command: ["cat"]
     tty: true
     securityContext:
       runAsUser: 0
@@ -57,9 +55,8 @@ spec:
             steps {
                 container('dind') {
                     sh '''
-                        sleep 15
+                        sleep 10
                         docker build -t resume-builder-app:latest .
-                        docker image ls
                     '''
                 }
             }
@@ -70,7 +67,7 @@ spec:
                 container('sonar-scanner') {
                     withCredentials([string(credentialsId: 'sonar-token-2401115', variable: 'SONAR_TOKEN')]) {
                         sh '''
-                            sonar-scanner \
+                          sonar-scanner \
                             -Dsonar.projectKey=Resumebuilder_Aniket_2401115s \
                             -Dsonar.host.url=http://my-sonarqube-sonarqube.sonarqube.svc.cluster.local:9000 \
                             -Dsonar.token=$SONAR_TOKEN
@@ -80,35 +77,41 @@ spec:
             }
         }
 
-        stage('Login to Docker Registry') {
+        stage('Login to Nexus') {
+            steps {
+                container('dind') {
+                    withCredentials([usernamePassword(
+                        credentialsId: 'nexus-credentials',
+                        usernameVariable: 'NEXUS_USER',
+                        passwordVariable: 'NEXUS_PASS'
+                    )]) {
+                        sh '''
+                          echo "$NEXUS_PASS" | docker login nexus.imcc.com:8085 \
+                            -u "$NEXUS_USER" --password-stdin
+                        '''
+                    }
+                }
+            }
+        }
+
+        stage('Tag & Push Image') {
             steps {
                 container('dind') {
                     sh '''
-                        docker login nexus-service-for-docker-hosted-registry.nexus.svc.cluster.local:8085 \
-                          -u admin -p Changeme@2025
+                        docker tag resume-builder-app:latest nexus.imcc.com:8085/my-repository/resume-builder-app:latest
+                        docker push nexus.imcc.com:8085/my-repository/resume-builder-app:latest
                     '''
                 }
             }
         }
 
-        stage('Build - Tag - Push') {
-            steps {
-                container('dind') {
-                    sh '''
-                        docker tag resume-builder-app:latest nexus-service-for-docker-hosted-registry.nexus.svc.cluster.local:8085/docker-hosted/resume-builder-app:latest
-                        docker push nexus-service-for-docker-hosted-registry.nexus.svc.cluster.local:8085/docker-hosted/resume-builder-app:latest
-                        docker image ls
-                    '''
-                }
-            }
-        }
-
-        stage('Deploy AI Application') {
+        stage('Deploy to Kubernetes') {
             steps {
                 container('kubectl') {
                     sh '''
                         kubectl apply -f resume-builder-k8s.yaml
-                        kubectl rollout status deployment/resume-builder-app -n 2401115 --timeout=120s || echo "Rollout still in progress"
+                        kubectl rollout restart deployment resume-builder-app -n 2401115
+                        kubectl rollout status deployment resume-builder-app -n 2401115 --timeout=180s
                     '''
                 }
             }
