@@ -50,10 +50,10 @@ spec:
     }
 
     environment {
-        REGISTRY = "nexus-service-for-docker-hosted-registry.nexus.svc.cluster.local:8085"
+        REGISTRY   = "nexus-service-for-docker-hosted-registry.nexus.svc.cluster.local:8085"
         IMAGE_NAME = "my-repository/resume-builder-app"
-        IMAGE_TAG = "latest"
-        NAMESPACE = "2401115"
+        IMAGE_TAG  = "${BUILD_NUMBER}"        // ✅ VERSIONED TAG
+        NAMESPACE  = "2401115"
     }
 
     stages {
@@ -64,7 +64,7 @@ spec:
                     sh '''
                         sleep 10
                         docker build -t ${IMAGE_NAME}:${IMAGE_TAG} .
-                        docker image ls
+                        docker images | head
                     '''
                 }
             }
@@ -77,10 +77,10 @@ spec:
                         string(credentialsId: 'sonar-token-2401115', variable: 'SONAR_TOKEN')
                     ]) {
                         sh '''
-                            sonar-scanner \
-                              -Dsonar.projectKey=Resumebuilder_Aniket_2401115s \
-                              -Dsonar.host.url=http://my-sonarqube-sonarqube.sonarqube.svc.cluster.local:9000 \
-                              -Dsonar.token=$SONAR_TOKEN
+                          sonar-scanner \
+                            -Dsonar.projectKey=Resumebuilder_Aniket_2401115s \
+                            -Dsonar.host.url=http://my-sonarqube-sonarqube.sonarqube.svc.cluster.local:9000 \
+                            -Dsonar.token=$SONAR_TOKEN
                         '''
                     }
                 }
@@ -111,7 +111,6 @@ spec:
                     sh '''
                         docker tag ${IMAGE_NAME}:${IMAGE_TAG} ${REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG}
                         docker push ${REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG}
-                        docker image ls
                     '''
                 }
             }
@@ -121,8 +120,13 @@ spec:
             steps {
                 container('kubectl') {
                     sh '''
-                        kubectl apply -f resume-builder-k8s.yaml
-                        kubectl rollout status deployment/resume-builder-app -n ${NAMESPACE} --timeout=180s || true
+                        echo "Updating image in deployment..."
+                        kubectl set image deployment/resume-builder-app \
+                          resume-builder=${REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG} \
+                          -n ${NAMESPACE}
+
+                        kubectl rollout status deployment/resume-builder-app \
+                          -n ${NAMESPACE} --timeout=300s
                     '''
                 }
             }
