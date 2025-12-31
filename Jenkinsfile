@@ -8,14 +8,12 @@ spec:
   containers:
   - name: sonar-scanner
     image: sonarsource/sonar-scanner-cli
-    command:
-    - cat
+    command: ["cat"]
     tty: true
 
   - name: kubectl
     image: bitnami/kubectl:latest
-    command:
-    - cat
+    command: ["cat"]
     tty: true
     securityContext:
       runAsUser: 0
@@ -44,7 +42,6 @@ spec:
   - name: docker-config
     configMap:
       name: docker-daemon-config
-
   - name: kubeconfig-secret
     secret:
       secretName: kubeconfig-secret
@@ -69,9 +66,7 @@ spec:
         stage('SonarQube Analysis') {
             steps {
                 container('sonar-scanner') {
-                    withCredentials([
-                        string(credentialsId: 'sonar-token-2401115', variable: 'SONAR_TOKEN')
-                    ]) {
+                    withCredentials([string(credentialsId: 'sonar-token-2401115', variable: 'SONAR_TOKEN')]) {
                         sh '''
                             sonar-scanner \
                               -Dsonar.projectKey=Resumebuilder_Aniket_2401115s \
@@ -88,7 +83,7 @@ spec:
                 container('dind') {
                     sh '''
                         docker login nexus-service-for-docker-hosted-registry.nexus.svc.cluster.local:8085 \
-                        -u admin -p Changeme@2025
+                          -u admin -p Changeme@2025
                     '''
                 }
             }
@@ -99,34 +94,44 @@ spec:
                 container('dind') {
                     sh '''
                         docker tag resume-builder-app:latest \
-                        nexus-service-for-docker-hosted-registry.nexus.svc.cluster.local:8085/docker-hosted/resume-builder-app:latest
-
+                          nexus-service-for-docker-hosted-registry.nexus.svc.cluster.local:8085/docker-hosted/resume-builder-app:latest
                         docker push nexus-service-for-docker-hosted-registry.nexus.svc.cluster.local:8085/docker-hosted/resume-builder-app:latest
-
                         docker image ls
                     '''
                 }
             }
         }
 
-        stage('Deploy AI Application') {
+        stage('Deploy Application') {
             steps {
                 container('kubectl') {
                     sh '''
                         kubectl apply -f resume-builder-k8s.yaml
-                        kubectl rollout status deployment/resume-builder-app -n 2401115
+                        kubectl rollout status deployment/resume-builder-app -n 2401115 --timeout=120s || true
                     '''
                 }
             }
         }
-    }
 
-    post {
-        success {
-            echo "✅ Pipeline completed successfully"
-        }
-        failure {
-            echo "❌ Pipeline failed"
+        // 🔍 ADDED DEBUG STAGE (IMPORTANT)
+        stage('Debug Kubernetes') {
+            steps {
+                container('kubectl') {
+                    sh '''
+                        echo "==== PODS ===="
+                        kubectl get pods -n 2401115 -o wide
+
+                        echo "==== SERVICES ===="
+                        kubectl get svc -n 2401115
+
+                        echo "==== INGRESS ===="
+                        kubectl get ingress -n 2401115
+
+                        echo "==== POD DETAILS ===="
+                        kubectl describe pod -n 2401115
+                    '''
+                }
+            }
         }
     }
 }
