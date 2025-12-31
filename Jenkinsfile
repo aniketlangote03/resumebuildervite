@@ -49,14 +49,21 @@ spec:
         }
     }
 
+    environment {
+        REGISTRY = "nexus-service-for-docker-hosted-registry.nexus.svc.cluster.local:8085"
+        IMAGE_NAME = "docker-hosted/resume-builder-app"
+        IMAGE_TAG = "latest"
+        NAMESPACE = "2401115"
+    }
+
     stages {
 
         stage('Build Docker Image') {
             steps {
                 container('dind') {
                     sh '''
-                        sleep 15
-                        docker build -t resume-builder-app:latest .
+                        sleep 10
+                        docker build -t ${IMAGE_NAME}:${IMAGE_TAG} .
                         docker image ls
                     '''
                 }
@@ -66,7 +73,9 @@ spec:
         stage('SonarQube Analysis') {
             steps {
                 container('sonar-scanner') {
-                    withCredentials([string(credentialsId: 'sonar-token-2401115', variable: 'SONAR_TOKEN')]) {
+                    withCredentials([
+                        string(credentialsId: 'sonar-token-2401115', variable: 'SONAR_TOKEN')
+                    ]) {
                         sh '''
                             sonar-scanner \
                               -Dsonar.projectKey=Resumebuilder_Aniket_2401115s \
@@ -78,24 +87,30 @@ spec:
             }
         }
 
-        stage('Login to Docker Registry') {
+        stage('Login to Nexus Registry') {
             steps {
                 container('dind') {
-                    sh '''
-                        docker login nexus-service-for-docker-hosted-registry.nexus.svc.cluster.local:8085 \
-                          -u admin -p Changeme@2025
-                    '''
+                    withCredentials([
+                        usernamePassword(
+                            credentialsId: 'nexus-creds',
+                            usernameVariable: 'NEXUS_USER',
+                            passwordVariable: 'NEXUS_PASS'
+                        )
+                    ]) {
+                        sh '''
+                          echo "$NEXUS_PASS" | docker login $REGISTRY -u "$NEXUS_USER" --password-stdin
+                        '''
+                    }
                 }
             }
         }
 
-        stage('Build - Tag - Push') {
+        stage('Tag & Push Image') {
             steps {
                 container('dind') {
                     sh '''
-                        docker tag resume-builder-app:latest \
-                          nexus-service-for-docker-hosted-registry.nexus.svc.cluster.local:8085/docker-hosted/resume-builder-app:latest
-                        docker push nexus-service-for-docker-hosted-registry.nexus.svc.cluster.local:8085/docker-hosted/resume-builder-app:latest
+                        docker tag ${IMAGE_NAME}:${IMAGE_TAG} ${REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG}
+                        docker push ${REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG}
                         docker image ls
                     '''
                 }
@@ -107,31 +122,39 @@ spec:
                 container('kubectl') {
                     sh '''
                         kubectl apply -f resume-builder-k8s.yaml
-                        kubectl rollout status deployment/resume-builder-app -n 2401115 --timeout=120s || true
+                        kubectl rollout status deployment/resume-builder-app -n ${NAMESPACE} --timeout=180s || true
                     '''
                 }
             }
         }
 
-        // 🔍 ADDED DEBUG STAGE (IMPORTANT)
         stage('Debug Kubernetes') {
             steps {
                 container('kubectl') {
                     sh '''
                         echo "==== PODS ===="
-                        kubectl get pods -n 2401115 -o wide
+                        kubectl get pods -n ${NAMESPACE} -o wide
 
                         echo "==== SERVICES ===="
-                        kubectl get svc -n 2401115
+                        kubectl get svc -n ${NAMESPACE}
 
                         echo "==== INGRESS ===="
-                        kubectl get ingress -n 2401115
+                        kubectl get ingress -n ${NAMESPACE}
 
                         echo "==== POD DETAILS ===="
-                        kubectl describe pod -n 2401115
+                        kubectl describe pod -n ${NAMESPACE}
                     '''
                 }
             }
+        }
+    }
+
+    post {
+        success {
+            echo "✅ Pipeline completed successfully"
+        }
+        failure {
+            echo "❌ Pipeline failed — check logs above"
         }
     }
 }

@@ -13,6 +13,8 @@ metadata:
 spec:
   replicas: 1
 
+  progressDeadlineSeconds: 180
+
   strategy:
     type: RollingUpdate
     rollingUpdate:
@@ -35,7 +37,7 @@ spec:
 
       containers:
         - name: resume-builder
-          image: nexus.imcc.com:8085/my-repository/resume-builder-app:latest
+          image: nexus-service-for-docker-hosted-registry.nexus.svc.cluster.local:8085/docker-hosted/resume-builder-app:latest
           imagePullPolicy: Always
 
           ports:
@@ -54,7 +56,7 @@ spec:
               exec:
                 command: ["sh", "-c", "sleep 5"]
 
-          # Startup probe ensures Nginx is actually up
+          # ✅ Startup probe (slow start protection)
           startupProbe:
             httpGet:
               path: /
@@ -62,24 +64,24 @@ spec:
             failureThreshold: 30
             periodSeconds: 2
 
-          # Readiness → controls Service routing
+          # ✅ Readiness probe (simple + safe)
           readinessProbe:
             httpGet:
               path: /
               port: 80
-            initialDelaySeconds: 5
+            initialDelaySeconds: 10
             periodSeconds: 10
             timeoutSeconds: 2
             failureThreshold: 3
 
-          # Liveness → restarts container if Nginx dies
+          # ✅ Liveness probe (not aggressive)
           livenessProbe:
             httpGet:
               path: /
               port: 80
             initialDelaySeconds: 30
-            periodSeconds: 15
-            timeoutSeconds: 2
+            periodSeconds: 20
+            timeoutSeconds: 3
             failureThreshold: 3
 ---
 apiVersion: v1
@@ -101,6 +103,8 @@ kind: Ingress
 metadata:
   name: resume-builder-ingress
   namespace: "2401115"
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
 spec:
   ingressClassName: nginx
   rules:
