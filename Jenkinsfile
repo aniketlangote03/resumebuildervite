@@ -51,7 +51,7 @@ spec:
 
     environment {
         REGISTRY = "nexus-service-for-docker-hosted-registry.nexus.svc.cluster.local:8085"
-        IMAGE_NAME = "docker-hosted/resume-builder-app"
+        IMAGE_NAME = "my-repository/resume-builder-app"
         IMAGE_TAG = "latest"
         NAMESPACE = "2401115"
     }
