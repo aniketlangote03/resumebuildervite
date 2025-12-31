@@ -11,6 +11,7 @@ spec:
     command:
     - cat
     tty: true
+
   - name: kubectl
     image: bitnami/kubectl:latest
     command:
@@ -21,11 +22,12 @@ spec:
       readOnlyRootFilesystem: false
     env:
     - name: KUBECONFIG
-      value: /kube/config        
+      value: /kube/config
     volumeMounts:
     - name: kubeconfig-secret
       mountPath: /kube/config
       subPath: kubeconfig
+
   - name: dind
     image: docker:dind
     securityContext:
@@ -37,10 +39,12 @@ spec:
     - name: docker-config
       mountPath: /etc/docker/daemon.json
       subPath: daemon.json
+
   volumes:
   - name: docker-config
     configMap:
       name: docker-daemon-config
+
   - name: kubeconfig-secret
     secret:
       secretName: kubeconfig-secret
@@ -65,12 +69,14 @@ spec:
         stage('SonarQube Analysis') {
             steps {
                 container('sonar-scanner') {
-                    withCredentials([string(credentialsId: 'sonar-token-2401115', variable: 'SONAR_TOKEN')]) {
+                    withCredentials([
+                        string(credentialsId: 'sonar-token-2401115', variable: 'SONAR_TOKEN')
+                    ]) {
                         sh '''
                             sonar-scanner \
-                            -Dsonar.projectKey=Resumebuilder_Aniket_2401115s \
-                            -Dsonar.host.url=http://my-sonarqube-sonarqube.sonarqube.svc.cluster.local:9000 \
-                            -Dsonar.token=$SONAR_TOKEN
+                              -Dsonar.projectKey=Resumebuilder_Aniket_2401115s \
+                              -Dsonar.host.url=http://my-sonarqube-sonarqube.sonarqube.svc.cluster.local:9000 \
+                              -Dsonar.token=$SONAR_TOKEN
                         '''
                     }
                 }
@@ -80,7 +86,10 @@ spec:
         stage('Login to Docker Registry') {
             steps {
                 container('dind') {
-                    sh 'docker login nexus-service-for-docker-hosted-registry.nexus.svc.cluster.local:8085 -u admin -p Changeme@2025'
+                    sh '''
+                        docker login nexus-service-for-docker-hosted-registry.nexus.svc.cluster.local:8085 \
+                        -u admin -p Changeme@2025
+                    '''
                 }
             }
         }
@@ -89,8 +98,11 @@ spec:
             steps {
                 container('dind') {
                     sh '''
-                        docker tag resume-builder-app:latest nexus-service-for-docker-hosted-registry.nexus.svc.cluster.local:8085/docker-hosted/resume-builder-app:latest
+                        docker tag resume-builder-app:latest \
+                        nexus-service-for-docker-hosted-registry.nexus.svc.cluster.local:8085/docker-hosted/resume-builder-app:latest
+
                         docker push nexus-service-for-docker-hosted-registry.nexus.svc.cluster.local:8085/docker-hosted/resume-builder-app:latest
+
                         docker image ls
                     '''
                 }
@@ -108,3 +120,13 @@ spec:
             }
         }
     }
+
+    post {
+        success {
+            echo "✅ Pipeline completed successfully"
+        }
+        failure {
+            echo "❌ Pipeline failed"
+        }
+    }
+}
