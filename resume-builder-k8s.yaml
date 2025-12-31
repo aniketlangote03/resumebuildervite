@@ -37,7 +37,8 @@ spec:
 
       containers:
         - name: resume-builder
-          image: nexus-service-for-docker-hosted-registry.nexus.svc.cluster.local:8085/docker-hosted/resume-builder-app:latest
+          # ✅ FIXED IMAGE (NodeIP + NodePort)
+          image: 192.168.20.250:32085/my-repository/resume-builder-app:latest
           imagePullPolicy: Always
 
           ports:
@@ -56,7 +57,7 @@ spec:
               exec:
                 command: ["sh", "-c", "sleep 5"]
 
-          # ✅ Startup probe (slow start protection)
+          # Startup probe
           startupProbe:
             httpGet:
               path: /
@@ -64,7 +65,7 @@ spec:
             failureThreshold: 30
             periodSeconds: 2
 
-          # ✅ Readiness probe (simple + safe)
+          # Readiness probe
           readinessProbe:
             httpGet:
               path: /
@@ -74,7 +75,7 @@ spec:
             timeoutSeconds: 2
             failureThreshold: 3
 
-          # ✅ Liveness probe (not aggressive)
+          # Liveness probe
           livenessProbe:
             httpGet:
               path: /

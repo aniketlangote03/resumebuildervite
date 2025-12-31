@@ -50,10 +50,13 @@ spec:
     }
 
     environment {
-        REGISTRY = "nexus-service-for-docker-hosted-registry.nexus.svc.cluster.local:8085"
-        IMAGE_NAME = "docker-hosted/resume-builder-app"
+        // ✅ IMPORTANT: Use NODE IP + NODEPORT (NOT .svc.cluster.local)
+        REGISTRY = "192.168.20.250:32085"
+        REPOSITORY = "my-repository"
+        IMAGE_NAME = "resume-builder-app"
         IMAGE_TAG = "latest"
         NAMESPACE = "2401115"
+        FULL_IMAGE = "${REGISTRY}/${REPOSITORY}/${IMAGE_NAME}:${IMAGE_TAG}"
     }
 
     stages {
@@ -64,7 +67,7 @@ spec:
                     sh '''
                         sleep 10
                         docker build -t ${IMAGE_NAME}:${IMAGE_TAG} .
-                        docker image ls
+                        docker images | grep ${IMAGE_NAME}
                     '''
                 }
             }
@@ -77,10 +80,10 @@ spec:
                         string(credentialsId: 'sonar-token-2401115', variable: 'SONAR_TOKEN')
                     ]) {
                         sh '''
-                            sonar-scanner \
-                              -Dsonar.projectKey=Resumebuilder_Aniket_2401115s \
-                              -Dsonar.host.url=http://my-sonarqube-sonarqube.sonarqube.svc.cluster.local:9000 \
-                              -Dsonar.token=$SONAR_TOKEN
+                          sonar-scanner \
+                            -Dsonar.projectKey=Resumebuilder_Aniket_2401115s \
+                            -Dsonar.host.url=http://my-sonarqube-sonarqube.sonarqube.svc.cluster.local:9000 \
+                            -Dsonar.token=$SONAR_TOKEN
                         '''
                     }
                 }
@@ -98,7 +101,8 @@ spec:
                         )
                     ]) {
                         sh '''
-                          echo "$NEXUS_PASS" | docker login $REGISTRY -u "$NEXUS_USER" --password-stdin
+                          echo "$NEXUS_PASS" | docker login ${REGISTRY} \
+                            -u "$NEXUS_USER" --password-stdin
                         '''
                     }
                 }
@@ -109,9 +113,9 @@ spec:
             steps {
                 container('dind') {
                     sh '''
-                        docker tag ${IMAGE_NAME}:${IMAGE_TAG} ${REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG}
-                        docker push ${REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG}
-                        docker image ls
+                        docker tag ${IMAGE_NAME}:${IMAGE_TAG} ${FULL_IMAGE}
+                        docker push ${FULL_IMAGE}
+                        docker image ls | grep resume-builder
                     '''
                 }
             }
@@ -122,6 +126,7 @@ spec:
                 container('kubectl') {
                     sh '''
                         kubectl apply -f resume-builder-k8s.yaml
+                        kubectl rollout restart deployment/resume-builder-app -n ${NAMESPACE}
                         kubectl rollout status deployment/resume-builder-app -n ${NAMESPACE} --timeout=180s || true
                     '''
                 }
