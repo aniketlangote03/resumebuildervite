@@ -8,14 +8,12 @@ spec:
   containers:
   - name: sonar-scanner
     image: sonarsource/sonar-scanner-cli
-    command:
-    - cat
+    command: ["cat"]
     tty: true
 
   - name: kubectl
     image: bitnami/kubectl:latest
-    command:
-    - cat
+    command: ["cat"]
     tty: true
     securityContext:
       runAsUser: 0
@@ -52,13 +50,20 @@ spec:
         }
     }
 
+    environment {
+        REGISTRY = "nexus-service-for-docker-hosted-registry.nexus.svc.cluster.local:8085"
+        IMAGE_NAME = "docker-hosted/resume-builder-app"
+        NAMESPACE = "2401115"
+        FULL_IMAGE = "${REGISTRY}/${IMAGE_NAME}:latest"
+    }
+
     stages {
 
         stage('Build Docker Image') {
             steps {
                 container('dind') {
                     sh '''
-                        sleep 15
+                        sleep 10
                         docker build -t resume-builder-app:latest .
                         docker image ls
                     '''
@@ -73,48 +78,50 @@ spec:
                         string(credentialsId: 'sonar-token-2401115', variable: 'SONAR_TOKEN')
                     ]) {
                         sh '''
-                            sonar-scanner \
-                              -Dsonar.projectKey=Resumebuilder_Aniket_2401115s \
-                              -Dsonar.host.url=http://my-sonarqube-sonarqube.sonarqube.svc.cluster.local:9000 \
-                              -Dsonar.token=$SONAR_TOKEN
+                          sonar-scanner \
+                            -Dsonar.projectKey=Resumebuilder_Aniket_2401115s \
+                            -Dsonar.host.url=http://my-sonarqube-sonarqube.sonarqube.svc.cluster.local:9000 \
+                            -Dsonar.token=$SONAR_TOKEN
                         '''
                     }
                 }
             }
         }
 
-        stage('Login to Docker Registry') {
+        stage('Login to Nexus Registry') {
             steps {
                 container('dind') {
                     sh '''
-                        docker login nexus-service-for-docker-hosted-registry.nexus.svc.cluster.local:8085 \
-                        -u admin -p Changeme@2025
+                        docker login ${REGISTRY} -u admin -p Changeme@2025
                     '''
                 }
             }
         }
 
-        stage('Build - Tag - Push') {
+        stage('Tag & Push Image') {
             steps {
                 container('dind') {
                     sh '''
-                        docker tag resume-builder-app:latest \
-                        nexus-service-for-docker-hosted-registry.nexus.svc.cluster.local:8085/docker-hosted/resume-builder-app:latest
-
-                        docker push nexus-service-for-docker-hosted-registry.nexus.svc.cluster.local:8085/docker-hosted/resume-builder-app:latest
-
+                        docker tag resume-builder-app:latest ${FULL_IMAGE}
+                        docker push ${FULL_IMAGE}
                         docker image ls
                     '''
                 }
             }
         }
 
-        stage('Deploy AI Application') {
+        stage('Deploy Application') {
             steps {
                 container('kubectl') {
                     sh '''
+                        echo "Deleting old deployment to avoid immutable selector issue..."
+                        kubectl delete deployment resume-builder-app -n ${NAMESPACE} --ignore-not-found
+
+                        echo "Applying Kubernetes manifests..."
                         kubectl apply -f resume-builder-k8s.yaml
-                        kubectl rollout status deployment/resume-builder-app -n 2401115
+
+                        echo "Waiting for rollout..."
+                        kubectl rollout status deployment/resume-builder-app -n ${NAMESPACE} --timeout=180s
                     '''
                 }
             }
