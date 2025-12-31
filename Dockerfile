@@ -1,24 +1,34 @@
-# Multi-stage build: build static assets with Node, serve with Nginx
-
+# ===============================
+# Build stage
+# ===============================
 FROM node:20-alpine AS build
+
 WORKDIR /app
 
-# Install dependencies
+# Copy dependency files first
 COPY package*.json ./
-RUN npm ci || npm install
 
-# Copy source and build
+# IMPORTANT: install devDependencies so Vite exists
+RUN npm ci --include=dev
+
+# Copy application source
 COPY . .
+
+# Build frontend
 RUN npm run build
 
-# Production image with Nginx
+
+# ===============================
+# Runtime stage
+# ===============================
 FROM nginx:1.27-alpine
 
-# Copy custom Nginx config
+# Copy custom nginx config
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 
-# Copy built assets
+# Copy built static files
 COPY --from=build /app/dist /usr/share/nginx/html
 
 EXPOSE 80
+
 CMD ["nginx", "-g", "daemon off;"]
