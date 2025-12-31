@@ -1,139 +1,110 @@
 pipeline {
-  agent {
-    kubernetes {
-      yaml """
+    agent {
+        kubernetes {
+            yaml '''
 apiVersion: v1
 kind: Pod
 spec:
   containers:
-
-  - name: dind
-    image: docker:24.0-dind
-    securityContext:
-      privileged: true
+  - name: sonar-scanner
+    image: sonarsource/sonar-scanner-cli
     command:
-      - dockerd
-    args:
-      - "--host=tcp://127.0.0.1:2375"
-      - "--host=unix:///var/run/docker.sock"
-      - "--insecure-registry=nexus-service-for-docker-hosted-registry.nexus.svc.cluster.local:8085"
-    env:
-      - name: DOCKER_TLS_CERTDIR
-        value: ""
-    volumeMounts:
-      - name: workspace-volume
-        mountPath: /home/jenkins/agent
-
+    - cat
+    tty: true
   - name: kubectl
     image: bitnami/kubectl:latest
-    command: ["cat"]
+    command:
+    - cat
     tty: true
+    securityContext:
+      runAsUser: 0
+      readOnlyRootFilesystem: false
     env:
-      - name: KUBECONFIG
-        value: /kube/config
+    - name: KUBECONFIG
+      value: /kube/config        
     volumeMounts:
-      - name: kubeconfig
-        mountPath: /kube/config
-        subPath: kubeconfig
-      - name: workspace-volume
-        mountPath: /home/jenkins/agent
-
-  - name: sonar
-    image: sonarsource/sonar-scanner-cli
-    command: ["cat"]
-    tty: true
+    - name: kubeconfig-secret
+      mountPath: /kube/config
+      subPath: kubeconfig
+  - name: dind
+    image: docker:dind
+    securityContext:
+      privileged: true
+    env:
+    - name: DOCKER_TLS_CERTDIR
+      value: ""
     volumeMounts:
-      - name: workspace-volume
-        mountPath: /home/jenkins/agent
-
+    - name: docker-config
+      mountPath: /etc/docker/daemon.json
+      subPath: daemon.json
   volumes:
-    - name: kubeconfig
-      secret:
-        secretName: kubeconfig-secret
-    - name: workspace-volume
-      emptyDir: {}
-"""
-    }
-  }
-
-  environment {
-    REGISTRY = "nexus-service-for-docker-hosted-registry.nexus.svc.cluster.local:8085"
-    IMAGE    = "resume-builder-app"
-    TAG      = "latest"
-  }
-
-  stages {
-
-    stage("Checkout") {
-      steps {
-        checkout scm
-      }
-    }
-
-    stage("SonarQube Scan") {
-      steps {
-        container("sonar") {
-          withCredentials([string(credentialsId: 'sonar-token-2401115', variable: 'SONAR_TOKEN')]) {
-            sh '''
-              sonar-scanner \
-                -Dsonar.projectKey=Resumebuilder_Aniket_2401115 \
-                -Dsonar.host.url=http://my-sonarqube-sonarqube.sonarqube.svc.cluster.local:9000 \
-                -Dsonar.token=$SONAR_TOKEN
-            '''
-          }
+  - name: docker-config
+    configMap:
+      name: docker-daemon-config
+  - name: kubeconfig-secret
+    secret:
+      secretName: kubeconfig-secret
+'''
         }
-      }
     }
 
-    stage("Build Docker Image") {
-      steps {
-        container("dind") {
-          sh '''
-            docker version
-            docker build -t ${IMAGE}:${TAG} .
-          '''
-        }
-      }
-    }
+    stages {
 
-    stage("Login to Nexus") {
-      steps {
-        container("dind") {
-          withCredentials([usernamePassword(
-            credentialsId: 'new-nexus-creds',
-            usernameVariable: 'NEXUS_USER',
-            passwordVariable: 'NEXUS_PASS'
-          )]) {
-            sh '''
-              echo "$NEXUS_PASS" | docker login http://${REGISTRY} \
-                -u "$NEXUS_USER" \
-                --password-stdin
-            '''
-          }
+        stage('Build Docker Image') {
+            steps {
+                container('dind') {
+                    sh '''
+                        sleep 15
+                        docker build -t resume-builder-app:latest .
+                        docker image ls
+                    '''
+                }
+            }
         }
-      }
-    }
 
-    stage("Push Image") {
-      steps {
-        container("dind") {
-          sh '''
-            docker tag ${IMAGE}:${TAG} ${REGISTRY}/${IMAGE}:${TAG}
-            docker push ${REGISTRY}/${IMAGE}:${TAG}
-          '''
+        stage('SonarQube Analysis') {
+            steps {
+                container('sonar-scanner') {
+                    withCredentials([string(credentialsId: 'sonar-token-2401115', variable: 'SONAR_TOKEN')]) {
+                        sh '''
+                            sonar-scanner \
+                            -Dsonar.projectKey=Resumebuilder_Aniket_2401115s \
+                            -Dsonar.host.url=http://my-sonarqube-sonarqube.sonarqube.svc.cluster.local:9000 \
+                            -Dsonar.token=$SONAR_TOKEN
+                        '''
+                    }
+                }
+            }
         }
-      }
-    }
 
-    stage("Deploy to Kubernetes") {
-      steps {
-        container("kubectl") {
-          sh '''
-            kubectl apply -f resume-builder-k8s.yaml
-            kubectl rollout status deployment/resume-builder-app -n 2401115 --timeout=180s
-          '''
+        stage('Login to Docker Registry') {
+            steps {
+                container('dind') {
+                    sh 'docker login nexus-service-for-docker-hosted-registry.nexus.svc.cluster.local:8085 -u admin -p Changeme@2025'
+                }
+            }
         }
-      }
+
+        stage('Build - Tag - Push') {
+            steps {
+                container('dind') {
+                    sh '''
+                        docker tag resume-builder-app:latest nexus-service-for-docker-hosted-registry.nexus.svc.cluster.local:8085/docker-hosted/resume-builder-app:latest
+                        docker push nexus-service-for-docker-hosted-registry.nexus.svc.cluster.local:8085/docker-hosted/resume-builder-app:latest
+                        docker image ls
+                    '''
+                }
+            }
+        }
+
+        stage('Deploy AI Application') {
+            steps {
+                container('kubectl') {
+                    sh '''
+                        kubectl apply -f resume-builder-k8s.yaml
+                        kubectl rollout status deployment/resume-builder-app -n 2401115
+                    '''
+                }
+            }
+        }
     }
-  }
-}
