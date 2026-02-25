@@ -1,41 +1,39 @@
 import jsPDF from 'jspdf'
 import html2canvas from 'html2canvas'
 
-export async function exportPDF(data, template, colors, font) {
-  try {
-    const element = document.createElement('div')
-    element.innerHTML = renderResumeHTML(data, template, colors, font)
-    document.body.appendChild(element)
-
-    const canvas = await html2canvas(element, {
-      scale: 2,
-      useCORS: true,
-      logging: false,
-      backgroundColor: colors.background
-    })
-
-    document.body.removeChild(element)
-
-    const imgData = canvas.toDataURL('image/png')
-    const pdf = new jsPDF('p', 'mm', 'a4')
-    const imgWidth = 210
-    const imgHeight = (canvas.height * imgWidth) / canvas.width
-    pdf.addImage(imgData, 'PNG', 0, 0, imgWidth, imgHeight)
-
-    const filename = `Resume_${data.personalInfo?.fullName || 'Resume'}_${new Date().toLocaleDateString()}.pdf`
-    pdf.save(filename)
-  } catch (error) {
-    console.error('PDF export error:', error)
-    throw error
+export async function exportPDF() {
+  const element = document.getElementById('resume-preview')
+  if (!element) {
+    throw new Error('Resume preview not found. Please make sure the preview is visible.')
   }
-}
 
-function renderResumeHTML(data, template, colors, font) {
-  return `
-    <div style="font-family: ${font}; color: ${colors.text}; background: ${colors.background}; padding: 40px;">
-      <h1 style="color: ${colors.accent}; margin: 0;">${data.personalInfo?.fullName}</h1>
-      <p style="margin: 5px 0;">${data.personalInfo?.jobTitle}</p>
-      <p style="margin: 5px 0; font-size: 12px;">${data.personalInfo?.email} | ${data.personalInfo?.phone}</p>
-    </div>
-  `
+  const canvas = await html2canvas(element, {
+    scale: 2,
+    useCORS: true,
+    logging: false,
+    backgroundColor: '#ffffff',
+  })
+
+  const imgData = canvas.toDataURL('image/png')
+  const pdf = new jsPDF('p', 'mm', 'a4')
+  const pdfWidth = 210
+  const pdfHeight = 297
+  const imgWidth = pdfWidth
+  const imgHeight = (canvas.height * pdfWidth) / canvas.width
+
+  // Handle multi-page if content is longer than one page
+  let heightLeft = imgHeight
+  let position = 0
+
+  pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight)
+  heightLeft -= pdfHeight
+
+  while (heightLeft > 0) {
+    position -= pdfHeight
+    pdf.addPage()
+    pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight)
+    heightLeft -= pdfHeight
+  }
+
+  pdf.save('Resume.pdf')
 }

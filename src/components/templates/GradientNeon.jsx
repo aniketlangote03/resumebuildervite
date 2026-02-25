@@ -1,9 +1,17 @@
 import React from 'react'
-export default function GradientNeon({ data }) {
+import ResumeBody, { ContactLine } from './ResumeBody'
+
+export default function GradientNeon({ data, colors }) {
   return (
-    <div className="bg-gradient-to-r from-fuchsia-500 to-cyan-500 -m-8 p-8 text-white">
-      <h1 className="text-3xl font-extrabold">{data.personalInfo?.fullName || 'Your Name'}</h1>
-      <p className="opacity-90">{data.personalInfo?.jobTitle}</p>
+    <div className="text-sm leading-relaxed">
+      <div className="bg-gradient-to-r from-fuchsia-500 to-cyan-500 -m-8 p-8 mb-4 text-white">
+        <h1 className="text-2xl font-extrabold">{data.personalInfo?.fullName || 'Your Name'}</h1>
+        {data.personalInfo?.jobTitle && <p className="opacity-90">{data.personalInfo.jobTitle}</p>}
+        <div className="text-xs opacity-70 flex flex-wrap gap-x-3 mt-1">
+          {[data.personalInfo?.email, data.personalInfo?.phone, data.personalInfo?.location].filter(Boolean).map((t, i) => <span key={i}>{t}</span>)}
+        </div>
+      </div>
+      <ResumeBody data={data} accent="#d946ef" tagBg="bg-fuchsia-50 border border-fuchsia-200" />
     </div>
   )
 }

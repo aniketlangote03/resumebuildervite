@@ -10,6 +10,27 @@ import CoverLetterBuilder from './CoverLetterBuilder'
 import { save as lsSave, load as lsLoad } from '../utils/localStorage'
 import { saveResume, fetchResume } from '../api'
 
+const INPUT = "w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+const CARD = "border border-gray-200 p-4 rounded-lg bg-gray-50"
+const ADD_BTN = "w-full px-4 py-2 border-2 border-dashed border-blue-300 rounded-lg text-blue-600 font-semibold hover:bg-blue-50 transition"
+const DEL_BTN = "text-red-500 hover:text-red-700 text-sm font-semibold transition"
+const TAG = "flex items-center gap-2 bg-blue-50 border border-blue-200 px-3 py-2 rounded-lg"
+
+const TABS = [
+  { key: 'personal', label: '👤 Personal' },
+  { key: 'summary', label: '📝 Summary' },
+  { key: 'experience', label: '💼 Experience' },
+  { key: 'education', label: '🎓 Education' },
+  { key: 'projects', label: '🚀 Projects' },
+  { key: 'skills', label: '⚡ Skills' },
+  { key: 'certifications', label: '📜 Certifications' },
+  { key: 'achievements', label: '🏆 Achievements' },
+  { key: 'languages', label: '🌐 Languages' },
+  { key: 'interests', label: '❤️ Interests' },
+  { key: 'references', label: '📋 References' },
+  { key: 'custom', label: '✏️ Custom' },
+]
+
 export default function Builder({ initialData, selectedTemplate, onBack, userId }) {
   const [resumeData, setResumeData] = useState(initialData || getDefaultResumeData())
   const [colors, setColors] = useState({
@@ -35,6 +56,7 @@ export default function Builder({ initialData, selectedTemplate, onBack, userId 
   )
   const [recentSaves, setRecentSaves] = useState([])
 
+  // --- Auto-save ---
   useEffect(() => {
     const timer = setTimeout(() => {
       localStorage.setItem('currentResumeData', JSON.stringify(resumeData))
@@ -52,7 +74,6 @@ export default function Builder({ initialData, selectedTemplate, onBack, userId 
       }
       persist()
     }, 3000)
-
     return () => clearTimeout(timer)
   }, [resumeData, colors, font, userId])
 
@@ -62,16 +83,11 @@ export default function Builder({ initialData, selectedTemplate, onBack, userId 
   }, [showSaveLoad])
 
   useEffect(() => {
-    try {
-      localStorage.setItem('activeTab', activeTab)
-    } catch {}
+    try { localStorage.setItem('activeTab', activeTab) } catch { }
   }, [activeTab])
 
-  // Ensure page restore returns to Builder when user is editing
   useEffect(() => {
-    try {
-      localStorage.setItem('currentPage', 'builder')
-    } catch {}
+    try { localStorage.setItem('currentPage', 'builder') } catch { }
   }, [])
 
   useEffect(() => {
@@ -80,30 +96,24 @@ export default function Builder({ initialData, selectedTemplate, onBack, userId 
         localStorage.setItem('currentResumeData', JSON.stringify(resumeData))
         localStorage.setItem('resumeColors', JSON.stringify(colors))
         localStorage.setItem('resumeFont', font)
-        try { localStorage.setItem('currentPage', 'builder') } catch {}
+        try { localStorage.setItem('currentPage', 'builder') } catch { }
         if (userId && typeof fetch === 'function') {
           const body = JSON.stringify({ data: resumeData })
           const url = `${(typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_API_URL) || '/api'}/resume/${encodeURIComponent(userId)}`
           fetch(url, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body, keepalive: true })
         }
-      } catch {}
+      } catch { }
     }
     window.addEventListener('beforeunload', handler)
     return () => window.removeEventListener('beforeunload', handler)
   }, [resumeData, colors, font, userId])
 
+  // --- Default data ---
   function getDefaultResumeData() {
     return {
       personalInfo: {
-        fullName: '',
-        jobTitle: '',
-        email: '',
-        phone: '',
-        location: '',
-        linkedin: '',
-        website: '',
-        github: '',
-        photoUrl: ''
+        fullName: '', jobTitle: '', email: '', phone: '',
+        location: '', linkedin: '', website: '', github: '', photoUrl: ''
       },
       summary: '',
       experience: [],
@@ -119,92 +129,355 @@ export default function Builder({ initialData, selectedTemplate, onBack, userId 
     }
   }
 
-  const handlePersonalInfoChange = (field, value) => {
-    setResumeData(prev => ({
-      ...prev,
-      personalInfo: {
-        ...prev.personalInfo,
-        [field]: value
-      }
-    }))
-    setAutoSaveStatus('saving')
+  // --- Generic helpers ---
+  const markSaving = () => setAutoSaveStatus('saving')
+
+  const updateField = (path, value) => {
+    markSaving()
+    setResumeData(prev => {
+      const keys = path.split('.')
+      const copy = JSON.parse(JSON.stringify(prev))
+      let obj = copy
+      for (let i = 0; i < keys.length - 1; i++) obj = obj[keys[i]]
+      obj[keys[keys.length - 1]] = value
+      return copy
+    })
   }
 
-  const handleSummaryChange = (value) => {
-    setResumeData(prev => ({
-      ...prev,
-      summary: value
-    }))
-    setAutoSaveStatus('saving')
+  const addToArray = (key, item) => {
+    markSaving()
+    setResumeData(prev => ({ ...prev, [key]: [...(prev[key] || []), item] }))
   }
 
-  const handleAddExperience = () => {
-    setResumeData(prev => ({
-      ...prev,
-      experience: [...prev.experience, {
-        jobTitle: '',
-        company: '',
-        location: '',
-        startDate: '',
-        endDate: '',
-        description: ''
-      }]
-    }))
+  const removeFromArray = (key, index) => {
+    markSaving()
+    setResumeData(prev => ({ ...prev, [key]: prev[key].filter((_, i) => i !== index) }))
   }
 
-  const handleUpdateExperience = (index, field, value) => {
-    const updated = [...resumeData.experience]
-    updated[index] = { ...updated[index], [field]: value }
-    setResumeData(prev => ({ ...prev, experience: updated }))
-    setAutoSaveStatus('saving')
+  const updateArrayItem = (key, index, field, value) => {
+    markSaving()
+    setResumeData(prev => {
+      const updated = [...prev[key]]
+      updated[index] = { ...updated[index], [field]: value }
+      return { ...prev, [key]: updated }
+    })
   }
 
-  const handleRemoveExperience = (index) => {
-    setResumeData(prev => ({
-      ...prev,
-      experience: prev.experience.filter((_, i) => i !== index)
-    }))
+  // --- Render helpers ---
+  const renderInput = (placeholder, value, onChange, type = 'text') => (
+    <input type={type} placeholder={placeholder} value={value || ''} onChange={onChange} className={INPUT} />
+  )
+
+  const renderTextarea = (placeholder, value, onChange, rows = 4) => (
+    <textarea placeholder={placeholder} value={value || ''} onChange={onChange} rows={rows} className={INPUT} />
+  )
+
+  const renderSectionHeader = (index, label, arrayKey) => (
+    <div className="flex justify-between items-center mb-3">
+      <h4 className="font-semibold text-gray-900">{label} {index + 1}</h4>
+      <button onClick={() => removeFromArray(arrayKey, index)} className={DEL_BTN}>Delete</button>
+    </div>
+  )
+
+  // ==================== TAB CONTENT ====================
+
+  const renderPersonal = () => (
+    <div className="space-y-3">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        {renderInput('Full Name', resumeData.personalInfo.fullName, e => updateField('personalInfo.fullName', e.target.value))}
+        {renderInput('Job Title', resumeData.personalInfo.jobTitle, e => updateField('personalInfo.jobTitle', e.target.value))}
+        {renderInput('Email', resumeData.personalInfo.email, e => updateField('personalInfo.email', e.target.value), 'email')}
+        {renderInput('Phone', resumeData.personalInfo.phone, e => updateField('personalInfo.phone', e.target.value), 'tel')}
+        {renderInput('Location (e.g. New York, NY)', resumeData.personalInfo.location, e => updateField('personalInfo.location', e.target.value))}
+        {renderInput('LinkedIn URL', resumeData.personalInfo.linkedin, e => updateField('personalInfo.linkedin', e.target.value), 'url')}
+        {renderInput('Website / Portfolio URL', resumeData.personalInfo.website, e => updateField('personalInfo.website', e.target.value), 'url')}
+        {renderInput('GitHub URL', resumeData.personalInfo.github, e => updateField('personalInfo.github', e.target.value), 'url')}
+      </div>
+      {renderInput('Photo URL (optional)', resumeData.personalInfo.photoUrl, e => updateField('personalInfo.photoUrl', e.target.value), 'url')}
+    </div>
+  )
+
+  const renderSummary = () => (
+    <div>
+      {renderTextarea('Write your professional summary...', resumeData.summary, e => updateField('summary', e.target.value), 8)}
+      <p className="text-xs text-gray-400 mt-2">Tip: 2–4 sentences highlighting your key qualifications and career goals.</p>
+    </div>
+  )
+
+  const renderExperience = () => (
+    <div className="space-y-4">
+      {(resumeData.experience || []).map((exp, i) => (
+        <div key={i} className={CARD}>
+          {renderSectionHeader(i, 'Experience', 'experience')}
+          <div className="space-y-3">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {renderInput('Job Title', exp.jobTitle, e => updateArrayItem('experience', i, 'jobTitle', e.target.value))}
+              {renderInput('Company', exp.company, e => updateArrayItem('experience', i, 'company', e.target.value))}
+              {renderInput('Location', exp.location, e => updateArrayItem('experience', i, 'location', e.target.value))}
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              {renderInput('Start Date (e.g. Jan 2022)', exp.startDate, e => updateArrayItem('experience', i, 'startDate', e.target.value))}
+              {renderInput('End Date (e.g. Present)', exp.endDate, e => updateArrayItem('experience', i, 'endDate', e.target.value))}
+            </div>
+            {renderTextarea('Description / bullet points...', exp.description, e => updateArrayItem('experience', i, 'description', e.target.value), 4)}
+          </div>
+        </div>
+      ))}
+      <button onClick={() => addToArray('experience', { jobTitle: '', company: '', location: '', startDate: '', endDate: '', description: '' })} className={ADD_BTN}>
+        + Add Experience
+      </button>
+    </div>
+  )
+
+  const renderEducation = () => (
+    <div className="space-y-4">
+      {(resumeData.education || []).map((edu, i) => (
+        <div key={i} className={CARD}>
+          {renderSectionHeader(i, 'Education', 'education')}
+          <div className="space-y-3">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {renderInput('Degree (e.g. B.S. Computer Science)', edu.degree, e => updateArrayItem('education', i, 'degree', e.target.value))}
+              {renderInput('Institution', edu.institution, e => updateArrayItem('education', i, 'institution', e.target.value))}
+              {renderInput('Year (e.g. 2018 – 2022)', edu.year, e => updateArrayItem('education', i, 'year', e.target.value))}
+            </div>
+            {renderTextarea('Additional details (GPA, honors, coursework...)', edu.description, e => updateArrayItem('education', i, 'description', e.target.value), 3)}
+          </div>
+        </div>
+      ))}
+      <button onClick={() => addToArray('education', { degree: '', institution: '', year: '', description: '' })} className={ADD_BTN}>
+        + Add Education
+      </button>
+    </div>
+  )
+
+  const renderProjects = () => (
+    <div className="space-y-4">
+      {(resumeData.projects || []).map((proj, i) => (
+        <div key={i} className={CARD}>
+          {renderSectionHeader(i, 'Project', 'projects')}
+          <div className="space-y-3">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {renderInput('Project Title', proj.title, e => updateArrayItem('projects', i, 'title', e.target.value))}
+              {renderInput('Your Role', proj.role, e => updateArrayItem('projects', i, 'role', e.target.value))}
+              {renderInput('Technologies Used', proj.technologies, e => updateArrayItem('projects', i, 'technologies', e.target.value))}
+              {renderInput('Project Link', proj.link, e => updateArrayItem('projects', i, 'link', e.target.value), 'url')}
+            </div>
+            {renderTextarea('Description...', proj.description, e => updateArrayItem('projects', i, 'description', e.target.value), 4)}
+          </div>
+        </div>
+      ))}
+      <button onClick={() => addToArray('projects', { title: '', role: '', description: '', technologies: '', link: '' })} className={ADD_BTN}>
+        + Add Project
+      </button>
+    </div>
+  )
+
+  const renderSkills = () => (
+    <div className="space-y-4">
+      <div className="space-y-2">
+        {(resumeData.skills || []).map((skill, i) => (
+          <div key={i} className={TAG}>
+            <span className="flex-1">{skill}</span>
+            <button onClick={() => removeFromArray('skills', i)} className="text-red-500 hover:text-red-700 font-bold">✕</button>
+          </div>
+        ))}
+      </div>
+      <input
+        type="text"
+        placeholder="Type a skill and press Enter..."
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' && e.currentTarget.value.trim()) {
+            const skill = e.currentTarget.value.trim()
+            if (!(resumeData.skills || []).includes(skill)) {
+              addToArray('skills', skill)
+            }
+            e.currentTarget.value = ''
+          }
+        }}
+        className={INPUT}
+      />
+      <p className="text-xs text-gray-400">Press Enter to add each skill. Examples: JavaScript, React, Project Management</p>
+    </div>
+  )
+
+  const renderCertifications = () => (
+    <div className="space-y-4">
+      <div className="space-y-2">
+        {(resumeData.certifications || []).map((cert, i) => (
+          <div key={i} className={TAG}>
+            <span className="flex-1">{cert}</span>
+            <button onClick={() => removeFromArray('certifications', i)} className="text-red-500 hover:text-red-700 font-bold">✕</button>
+          </div>
+        ))}
+      </div>
+      <input
+        type="text"
+        placeholder="Type a certification and press Enter..."
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' && e.currentTarget.value.trim()) {
+            addToArray('certifications', e.currentTarget.value.trim())
+            e.currentTarget.value = ''
+          }
+        }}
+        className={INPUT}
+      />
+      <p className="text-xs text-gray-400">Example: AWS Solutions Architect – Associate (2024)</p>
+    </div>
+  )
+
+  const renderAchievements = () => (
+    <div className="space-y-4">
+      <div className="space-y-2">
+        {(resumeData.achievements || []).map((ach, i) => (
+          <div key={i} className={TAG}>
+            <span className="flex-1">{ach}</span>
+            <button onClick={() => removeFromArray('achievements', i)} className="text-red-500 hover:text-red-700 font-bold">✕</button>
+          </div>
+        ))}
+      </div>
+      <input
+        type="text"
+        placeholder="Type an achievement and press Enter..."
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' && e.currentTarget.value.trim()) {
+            addToArray('achievements', e.currentTarget.value.trim())
+            e.currentTarget.value = ''
+          }
+        }}
+        className={INPUT}
+      />
+      <p className="text-xs text-gray-400">Example: Led team of 12 to deliver project 2 weeks ahead of schedule</p>
+    </div>
+  )
+
+  const renderLanguages = () => (
+    <div className="space-y-4">
+      <div className="space-y-2">
+        {(resumeData.languages || []).map((lang, i) => (
+          <div key={i} className={TAG}>
+            <span className="flex-1">{lang}</span>
+            <button onClick={() => removeFromArray('languages', i)} className="text-red-500 hover:text-red-700 font-bold">✕</button>
+          </div>
+        ))}
+      </div>
+      <input
+        type="text"
+        placeholder="Type a language and press Enter..."
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' && e.currentTarget.value.trim()) {
+            addToArray('languages', e.currentTarget.value.trim())
+            e.currentTarget.value = ''
+          }
+        }}
+        className={INPUT}
+      />
+      <p className="text-xs text-gray-400">Example: English (Native), Spanish (Conversational)</p>
+    </div>
+  )
+
+  const renderInterests = () => (
+    <div className="space-y-4">
+      <div className="space-y-2">
+        {(resumeData.interests || []).map((int, i) => (
+          <div key={i} className={TAG}>
+            <span className="flex-1">{int}</span>
+            <button onClick={() => removeFromArray('interests', i)} className="text-red-500 hover:text-red-700 font-bold">✕</button>
+          </div>
+        ))}
+      </div>
+      <input
+        type="text"
+        placeholder="Type an interest/hobby and press Enter..."
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' && e.currentTarget.value.trim()) {
+            addToArray('interests', e.currentTarget.value.trim())
+            e.currentTarget.value = ''
+          }
+        }}
+        className={INPUT}
+      />
+    </div>
+  )
+
+  const renderReferences = () => (
+    <div className="space-y-4">
+      <div className="space-y-2">
+        {(resumeData.references || []).map((ref, i) => (
+          <div key={i} className={TAG}>
+            <span className="flex-1">{ref}</span>
+            <button onClick={() => removeFromArray('references', i)} className="text-red-500 hover:text-red-700 font-bold">✕</button>
+          </div>
+        ))}
+      </div>
+      <input
+        type="text"
+        placeholder="Type a reference and press Enter..."
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' && e.currentTarget.value.trim()) {
+            addToArray('references', e.currentTarget.value.trim())
+            e.currentTarget.value = ''
+          }
+        }}
+        className={INPUT}
+      />
+      <p className="text-xs text-gray-400">Example: Jane Doe – Manager at Acme Inc – jane@acme.com</p>
+    </div>
+  )
+
+  const renderCustomFields = () => (
+    <div className="space-y-4">
+      {(resumeData.customFields || []).map((field, i) => (
+        <div key={field.id || i} className={CARD}>
+          <div className="flex justify-between items-center mb-3">
+            <h4 className="font-semibold text-gray-900">Custom Section {i + 1}</h4>
+            <button onClick={() => removeFromArray('customFields', i)} className={DEL_BTN}>Delete</button>
+          </div>
+          <div className="space-y-3">
+            {renderInput('Section Title', field.title, e => updateArrayItem('customFields', i, 'title', e.target.value))}
+            {renderTextarea('Content...', field.content, e => updateArrayItem('customFields', i, 'content', e.target.value), 4)}
+          </div>
+        </div>
+      ))}
+      <button onClick={() => addToArray('customFields', { id: `custom_${Date.now()}`, title: '', content: '', type: 'text', isCustom: true })} className={ADD_BTN}>
+        + Add Custom Section
+      </button>
+    </div>
+  )
+
+  const tabRenderers = {
+    personal: renderPersonal,
+    summary: renderSummary,
+    experience: renderExperience,
+    education: renderEducation,
+    projects: renderProjects,
+    skills: renderSkills,
+    certifications: renderCertifications,
+    achievements: renderAchievements,
+    languages: renderLanguages,
+    interests: renderInterests,
+    references: renderReferences,
+    custom: renderCustomFields,
   }
 
-  const handleSkillAdd = (skill) => {
-    if (skill.trim() && !resumeData.skills.includes(skill.trim())) {
-      setResumeData(prev => ({
-        ...prev,
-        skills: [...prev.skills, skill.trim()]
-      }))
-      setAutoSaveStatus('saving')
-    }
-  }
-
-  const handleSkillRemove = (index) => {
-    setResumeData(prev => ({
-      ...prev,
-      skills: prev.skills.filter((_, i) => i !== index)
-    }))
-  }
-
+  // ==================== MAIN RENDER ====================
   return (
     <div className="min-h-screen bg-gray-100">
+      {/* Top bar */}
       <div className="bg-white shadow-sm sticky top-0 z-40">
-        <div className="max-w-7xl mx-auto px-4 py-4 flex justify-between items-center">
+        <div className="max-w-7xl mx-auto px-4 py-3 flex flex-wrap justify-between items-center gap-2">
           <div className="flex items-center gap-4">
-            <button onClick={onBack} className="text-gray-600 hover:text-gray-900">← Back</button>
-            <h1 className="text-2xl font-bold">Resume Builder</h1>
-          </div>
-          <div className="flex items-center gap-3">
-            <span className="text-sm text-gray-600">
+            <button onClick={onBack} className="text-gray-600 hover:text-gray-900 transition">← Back</button>
+            <h1 className="text-xl font-bold">Resume Builder</h1>
+            <span className="text-sm text-gray-500">
               {autoSaveStatus === 'saved' && '✓ Saved'}
               {autoSaveStatus === 'saving' && '⟳ Saving...'}
             </span>
+          </div>
+          <div className="flex items-center gap-2 flex-wrap">
             {userId && (
               <div className="hidden md:flex items-center gap-2 text-xs text-gray-600 border rounded px-2 py-1">
-                <span className="truncate max-w-[140px]">{userId}</span>
-                <button
-                  onClick={() => navigator.clipboard.writeText(userId)}
-                  className="underline"
-                >
-                  Copy ID
-                </button>
+                <span className="truncate max-w-[120px]">{userId}</span>
+                <button onClick={() => navigator.clipboard.writeText(userId)} className="underline">Copy</button>
               </div>
             )}
             <button
@@ -215,73 +488,44 @@ export default function Builder({ initialData, selectedTemplate, onBack, userId 
                 const idx = lsLoad('saved_index', []) || []
                 const next = [{ id, name, date: new Date().toISOString() }, ...idx]
                 lsSave('saved_index', next)
-                setRecentSaves(next.slice(0,3))
+                setRecentSaves(next.slice(0, 3))
               }}
-              className="px-4 py-2 border border-gray-300 rounded-lg font-semibold hover:bg-gray-50"
-            >
-              Save Current
-            </button>
+              className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm font-semibold hover:bg-gray-50 transition"
+            >Save</button>
             <button
               onClick={async () => {
                 try {
                   setAutoSaveStatus('saving')
-                  if (userId) {
-                    await saveResume(userId, resumeData)
-                  }
+                  if (userId) await saveResume(userId, resumeData)
                   setAutoSaveStatus('saved')
-                } catch {}
+                } catch { }
               }}
-              className="px-4 py-2 border border-gray-300 rounded-lg font-semibold hover:bg-gray-50"
-            >
-              Save to Cloud
-            </button>
+              className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm font-semibold hover:bg-gray-50 transition"
+            >☁️ Cloud</button>
             <button
               onClick={async () => {
                 try {
                   if (userId) {
                     const res = await fetchResume(userId)
-                    if (res && res.data) {
-                      setResumeData(res.data)
-                    }
+                    if (res?.data) setResumeData(res.data)
                   }
-                } catch {}
+                } catch { }
               }}
-              className="px-4 py-2 border border-gray-300 rounded-lg font-semibold hover:bg-gray-50"
-            >
-              Load from Cloud
-            </button>
-            <button
-              onClick={() => setShowAnalytics(true)}
-              className="px-4 py-2 border border-gray-300 rounded-lg font-semibold hover:bg-gray-50"
-            >
-              Analytics
-            </button>
-            <button
-              onClick={() => setShowCover(true)}
-              className="px-4 py-2 border border-gray-300 rounded-lg font-semibold hover:bg-gray-50"
-            >
-              Cover Letter
-            </button>
-            <button
-              onClick={() => setShowSaveLoad(true)}
-              className="px-4 py-2 border border-gray-300 rounded-lg font-semibold hover:bg-gray-50"
-            >
-              Save/Load
-            </button>
-            <button
-              onClick={() => setShowExport(true)}
-              className="bg-blue-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-blue-700"
-            >
-              Export
-            </button>
+              className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm font-semibold hover:bg-gray-50 transition"
+            >⬇️ Load</button>
+            <button onClick={() => setShowSaveLoad(true)} className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm font-semibold hover:bg-gray-50 transition">📁</button>
+            <button onClick={() => setShowAnalytics(true)} className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm font-semibold hover:bg-gray-50 transition">📊</button>
+            <button onClick={() => setShowCover(true)} className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm font-semibold hover:bg-gray-50 transition">✉️</button>
+            <button onClick={() => setShowExport(true)} className="bg-blue-600 text-white px-4 py-1.5 rounded-lg text-sm font-semibold hover:bg-blue-700 transition">Export</button>
           </div>
         </div>
       </div>
 
       <div className="max-w-7xl mx-auto p-4">
         <div className="grid lg:grid-cols-5 gap-4">
+          {/* Preview */}
           <div className="lg:col-span-2">
-            <Preview 
+            <Preview
               data={resumeData}
               template={selectedTemplate}
               colors={colors}
@@ -289,149 +533,36 @@ export default function Builder({ initialData, selectedTemplate, onBack, userId 
             />
           </div>
 
+          {/* Editor */}
           <div className="lg:col-span-3 space-y-4">
             <div className="bg-white rounded-lg shadow-sm">
-              <div className="flex border-b overflow-x-auto">
-                {['personal', 'summary', 'experience', 'education', 'skills', 'custom'].map(tab => (
+              {/* Tab bar */}
+              <div className="flex border-b overflow-x-auto scrollbar-hide">
+                {TABS.map(tab => (
                   <button
-                    key={tab}
-                    onClick={() => setActiveTab(tab)}
-                    className={`px-4 py-2 font-semibold whitespace-nowrap transition ${
-                      activeTab === tab
-                        ? 'text-blue-600 border-b-2 border-blue-600'
-                        : 'text-gray-600 hover:text-gray-900'
-                    }`}
+                    key={tab.key}
+                    onClick={() => setActiveTab(tab.key)}
+                    className={`px-3 py-2.5 text-sm font-semibold whitespace-nowrap transition ${activeTab === tab.key
+                        ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50/50'
+                        : 'text-gray-500 hover:text-gray-900 hover:bg-gray-50'
+                      }`}
                   >
-                    {tab.charAt(0).toUpperCase() + tab.slice(1)}
+                    {tab.label}
                   </button>
                 ))}
               </div>
 
+              {/* Tab content */}
               <div className="p-6">
-                {activeTab === 'personal' && (
-                  <div className="space-y-4">
-                    <input
-                      type="text"
-                      placeholder="Full Name"
-                      value={resumeData.personalInfo.fullName}
-                      onChange={(e) => handlePersonalInfoChange('fullName', e.target.value)}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    />
-                    <input
-                      type="text"
-                      placeholder="Job Title"
-                      value={resumeData.personalInfo.jobTitle}
-                      onChange={(e) => handlePersonalInfoChange('jobTitle', e.target.value)}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    />
-                    <input
-                      type="email"
-                      placeholder="Email"
-                      value={resumeData.personalInfo.email}
-                      onChange={(e) => handlePersonalInfoChange('email', e.target.value)}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    />
-                    <input
-                      type="tel"
-                      placeholder="Phone"
-                      value={resumeData.personalInfo.phone}
-                      onChange={(e) => handlePersonalInfoChange('phone', e.target.value)}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    />
-                  </div>
-                )}
-
-                {activeTab === 'summary' && (
-                  <textarea
-                    placeholder="Write your professional summary..."
-                    value={resumeData.summary}
-                    onChange={(e) => handleSummaryChange(e.target.value)}
-                    rows={8}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  />
-                )}
-
-                {activeTab === 'experience' && (
-                  <div className="space-y-6">
-                    {resumeData.experience.map((exp, i) => (
-                      <div key={i} className="border border-gray-300 p-4 rounded-lg">
-                        <div className="flex justify-between mb-4">
-                          <h4 className="font-semibold text-gray-900">Experience {i + 1}</h4>
-                          <button
-                            onClick={() => handleRemoveExperience(i)}
-                            className="text-red-600 hover:text-red-700 text-sm font-semibold"
-                          >
-                            Delete
-                          </button>
-                        </div>
-                        <input
-                          type="text"
-                          placeholder="Job Title"
-                          value={exp.jobTitle}
-                          onChange={(e) => handleUpdateExperience(i, 'jobTitle', e.target.value)}
-                          className="w-full px-4 py-2 border border-gray-300 rounded-lg mb-3"
-                        />
-                        <input
-                          type="text"
-                          placeholder="Company"
-                          value={exp.company}
-                          onChange={(e) => handleUpdateExperience(i, 'company', e.target.value)}
-                          className="w-full px-4 py-2 border border-gray-300 rounded-lg mb-3"
-                        />
-                      </div>
-                    ))}
-                    <button
-                      onClick={handleAddExperience}
-                      className="w-full px-4 py-2 border-2 border-dashed border-blue-300 rounded-lg text-blue-600 font-semibold hover:bg-blue-50"
-                    >
-                      + Add Experience
-                    </button>
-                  </div>
-                )}
-
-                {activeTab === 'skills' && (
-                  <div className="space-y-4">
-                    <div className="space-y-2">
-                      {resumeData.skills.map((skill, i) => (
-                        <div key={i} className="flex items-center justify-between bg-blue-50 p-3 rounded-lg">
-                          <span>{skill}</span>
-                          <button
-                            onClick={() => handleSkillRemove(i)}
-                            className="text-red-600 hover:text-red-700"
-                          >
-                            ✕
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                    <input
-                      type="text"
-                      placeholder="Add skill and press Enter..."
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
-                          handleSkillAdd(e.currentTarget.value)
-                          e.currentTarget.value = ''
-                        }
-                      }}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg"
-                    />
-                  </div>
-                )}
+                {tabRenderers[activeTab]?.()}
               </div>
             </div>
 
+            {/* Customization */}
             <div className="bg-white rounded-lg shadow-sm p-6 space-y-4">
-              <h3 className="font-bold text-lg">Customization</h3>
-              
-              <ColorPicker 
-                colors={colors}
-                onColorChange={setColors}
-              />
-
-              <FontSelector 
-                font={font}
-                onFontChange={setFont}
-              />
+              <h3 className="font-bold text-lg">🎨 Customization</h3>
+              <ColorPicker colors={colors} onColorChange={setColors} />
+              <FontSelector font={font} onFontChange={setFont} />
             </div>
 
             <ATSChecker data={resumeData} />
@@ -450,8 +581,9 @@ export default function Builder({ initialData, selectedTemplate, onBack, userId 
         </div>
       </div>
 
+      {/* Modals */}
       {showExport && (
-        <ExportPanel 
+        <ExportPanel
           data={resumeData}
           template={selectedTemplate}
           colors={colors}
@@ -463,10 +595,7 @@ export default function Builder({ initialData, selectedTemplate, onBack, userId 
       {showSaveLoad && (
         <SaveLoadPanel
           currentData={resumeData}
-          onLoad={(data) => {
-            setResumeData(data)
-            setShowSaveLoad(false)
-          }}
+          onLoad={(data) => { setResumeData(data); setShowSaveLoad(false) }}
           onClose={() => setShowSaveLoad(false)}
         />
       )}
@@ -478,7 +607,7 @@ export default function Builder({ initialData, selectedTemplate, onBack, userId 
               <h2 className="text-xl font-bold">Analytics</h2>
               <button onClick={() => setShowAnalytics(false)} className="px-3 py-1 border rounded-lg">Close</button>
             </div>
-            <AnalyticsDashboard />
+            <AnalyticsDashboard data={resumeData} />
           </div>
         </div>
       )}
@@ -490,7 +619,7 @@ export default function Builder({ initialData, selectedTemplate, onBack, userId 
               <h2 className="text-xl font-bold">Cover Letter</h2>
               <button onClick={() => setShowCover(false)} className="px-3 py-1 border rounded-lg">Close</button>
             </div>
-            <CoverLetterBuilder />
+            <CoverLetterBuilder data={resumeData} />
           </div>
         </div>
       )}
