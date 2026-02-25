@@ -33,12 +33,20 @@ export default function Preview({ data, template, colors, font }) {
   const TemplateComponent = TEMPLATE_MAP[template] || Minimalist
 
   return (
-    <div
-      id="resume-preview"
-      className="bg-white rounded-lg shadow-lg p-8 sticky top-20 h-fit overflow-auto max-h-[85vh] border border-gray-200"
-      style={{ fontFamily: font || 'Inter, sans-serif' }}
-    >
-      <TemplateComponent data={data} colors={colors} />
+    <div className="sticky top-20 h-fit">
+      {/* A4-like container with shadow */}
+      <div
+        id="resume-preview"
+        className="bg-white rounded-lg shadow-xl p-8 overflow-auto max-h-[85vh] border border-gray-100"
+        style={{
+          fontFamily: font || 'Inter, sans-serif',
+          aspectRatio: '210 / 297',
+          minHeight: '400px',
+        }}
+      >
+        <TemplateComponent data={data} colors={colors} />
+      </div>
+      <p className="text-center text-[10px] text-gray-400 mt-2">Live Preview · {template || 'Minimalist'}</p>
     </div>
   )
 }

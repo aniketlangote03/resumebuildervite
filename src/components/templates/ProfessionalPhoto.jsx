@@ -3,25 +3,21 @@ import ResumeBody from './ResumeBody'
 
 export default function ProfessionalPhoto({ data, colors }) {
   return (
-    <div className="text-sm leading-relaxed">
-      <div className="grid grid-cols-3 gap-4 mb-3">
-        <div className="col-span-1 flex justify-center">
-          {data.personalInfo?.photoUrl
-            ? <img src={data.personalInfo.photoUrl} alt="" className="w-24 h-24 rounded-full object-cover" />
-            : <div className="w-24 h-24 bg-gray-300 rounded-full flex items-center justify-center text-gray-500 text-3xl">👤</div>
-          }
-        </div>
-        <div className="col-span-2">
-          <h1 className="text-2xl font-bold text-blue-700">{data.personalInfo?.fullName || 'Your Name'}</h1>
-          {data.personalInfo?.jobTitle && <p className="text-gray-600">{data.personalInfo.jobTitle}</p>}
-          <div className="text-xs text-gray-500 mt-1 space-y-0.5">
-            {data.personalInfo?.email && <p>{data.personalInfo.email}</p>}
-            {data.personalInfo?.phone && <p>{data.personalInfo.phone}</p>}
-            {data.personalInfo?.location && <p>{data.personalInfo.location}</p>}
+    <div className="text-[13px] leading-relaxed text-gray-800">
+      <div className="flex items-center gap-5 mb-5 pb-4 border-b-2 border-blue-100">
+        {data.personalInfo?.photoUrl
+          ? <img src={data.personalInfo.photoUrl} alt="" className="w-20 h-20 rounded-full object-cover ring-2 ring-blue-200 ring-offset-2" />
+          : <div className="w-20 h-20 bg-gradient-to-br from-blue-100 to-blue-200 rounded-full flex items-center justify-center text-blue-400 text-3xl ring-2 ring-blue-200 ring-offset-2">👤</div>
+        }
+        <div>
+          <h1 className="text-[22px] font-bold text-blue-700">{data.personalInfo?.fullName || 'Your Name'}</h1>
+          {data.personalInfo?.jobTitle && <p className="text-[13px] text-gray-500 font-medium">{data.personalInfo.jobTitle}</p>}
+          <div className="text-[11px] text-gray-500 mt-1 space-y-0.5">
+            {data.personalInfo?.email && <span>{data.personalInfo.email}</span>}
+            {data.personalInfo?.phone && <span className="ml-3">{data.personalInfo.phone}</span>}
           </div>
         </div>
       </div>
-      <div className="border-b border-blue-200 mb-3" />
       <ResumeBody data={data} accent="#1d4ed8" />
     </div>
   )
