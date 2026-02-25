@@ -3,37 +3,51 @@ import ResumeBody from './ResumeBody'
 
 export default function CreativeSplit({ data, colors }) {
     const accent = '#4f46e5'
+    const contact = [
+        { icon: '✉', val: data.personalInfo?.email },
+        { icon: '☎', val: data.personalInfo?.phone },
+        { icon: '📍', val: data.personalInfo?.location },
+        { icon: '🔗', val: data.personalInfo?.linkedin },
+        { icon: '💻', val: data.personalInfo?.github },
+    ].filter(x => x.val)
+
     return (
-        <div className="text-[13px] leading-relaxed">
-            <div className="grid grid-cols-5 gap-0">
-                {/* Sidebar */}
-                <div className="col-span-2 bg-indigo-600 text-white -m-8 p-6" style={{ minHeight: 'calc(100% + 4rem)' }}>
-                    <h1 className="text-[18px] font-bold mb-0.5">{data.personalInfo?.fullName || 'Your Name'}</h1>
-                    {data.personalInfo?.jobTitle && <p className="text-[11px] opacity-80 mb-4">{data.personalInfo.jobTitle}</p>}
-                    <div className="text-[11px] opacity-70 space-y-1.5">
-                        {data.personalInfo?.email && <p>✉ {data.personalInfo.email}</p>}
-                        {data.personalInfo?.phone && <p>☎ {data.personalInfo.phone}</p>}
-                        {data.personalInfo?.location && <p>📍 {data.personalInfo.location}</p>}
-                        {data.personalInfo?.linkedin && <p>🔗 {data.personalInfo.linkedin}</p>}
-                        {data.personalInfo?.github && <p>💻 {data.personalInfo.github}</p>}
+        <div style={{ display: 'grid', gridTemplateColumns: '38% 1fr', gap: 0 }}>
+            {/* Sidebar */}
+            <div style={{
+                background: accent, color: '#fff',
+                margin: '-40px 0 -40px -40px', padding: '32px 20px',
+                borderRadius: '4px 0 0 4px',
+            }}>
+                <h1 style={{ color: '#fff', fontSize: '20px' }}>{data.personalInfo?.fullName || 'Your Name'}</h1>
+                {data.personalInfo?.jobTitle && <p style={{ fontSize: '11px', opacity: 0.8, marginTop: '2px', marginBottom: '16px' }}>{data.personalInfo.jobTitle}</p>}
+
+                <div style={{ fontSize: '11px', opacity: 0.7 }}>
+                    {contact.map((c, i) => <div key={i} style={{ marginBottom: '6px' }}>{c.icon} {c.val}</div>)}
+                </div>
+
+                {data.skills?.length > 0 && (
+                    <div style={{ marginTop: '20px' }}>
+                        <div style={{ fontSize: '10px', fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', opacity: 0.6, marginBottom: '8px' }}>Skills</div>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                            {data.skills.map((s, i) => <span key={i} style={{ fontSize: '10px', background: 'rgba(255,255,255,0.2)', padding: '2px 8px', borderRadius: '12px' }}>{s}</span>)}
+                        </div>
                     </div>
-                    {data.skills?.length > 0 && (
-                        <div className="mt-5">
-                            <h3 className="text-[10px] font-bold tracking-[0.15em] uppercase opacity-70 mb-2">Skills</h3>
-                            <div className="flex flex-wrap gap-1.5">{data.skills.map((s, i) => <span key={i} className="text-[10px] bg-white/20 px-2 py-0.5 rounded-full">{s}</span>)}</div>
+                )}
+
+                {data.languages?.length > 0 && (
+                    <div style={{ marginTop: '16px' }}>
+                        <div style={{ fontSize: '10px', fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', opacity: 0.6, marginBottom: '8px' }}>Languages</div>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                            {data.languages.map((l, i) => <span key={i} style={{ fontSize: '10px', background: 'rgba(255,255,255,0.2)', padding: '2px 8px', borderRadius: '12px' }}>{l}</span>)}
                         </div>
-                    )}
-                    {data.languages?.length > 0 && (
-                        <div className="mt-4">
-                            <h3 className="text-[10px] font-bold tracking-[0.15em] uppercase opacity-70 mb-2">Languages</h3>
-                            <div className="flex flex-wrap gap-1.5">{data.languages.map((l, i) => <span key={i} className="text-[10px] bg-white/20 px-2 py-0.5 rounded-full">{l}</span>)}</div>
-                        </div>
-                    )}
-                </div>
-                {/* Main content */}
-                <div className="col-span-3 pl-6 pt-0">
-                    <ResumeBody data={{ ...data, skills: [], languages: [] }} accent={accent} />
-                </div>
+                    </div>
+                )}
+            </div>
+
+            {/* Main */}
+            <div style={{ paddingLeft: '24px' }}>
+                <ResumeBody data={{ ...data, skills: [], languages: [] }} accent={accent} />
             </div>
         </div>
     )

@@ -2,21 +2,23 @@ import React from 'react'
 import ResumeBody from './ResumeBody'
 
 export default function ExecutivePortrait({ data, colors }) {
+  const contact = [data.personalInfo?.email, data.personalInfo?.phone, data.personalInfo?.location].filter(Boolean)
   return (
-    <div className="text-[13px] leading-relaxed text-gray-800">
-      <div className="flex items-center gap-4 -m-8 p-8 bg-gray-50 mb-5 border-b border-gray-200">
+    <div>
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: '16px',
+        margin: '-40px -40px 20px', padding: '24px 40px',
+        background: '#f9fafb', borderBottom: '1px solid #e5e7eb',
+        borderRadius: '4px 4px 0 0'
+      }}>
         {data.personalInfo?.photoUrl
-          ? <img src={data.personalInfo.photoUrl} alt="" className="w-16 h-16 rounded-full object-cover" />
-          : <div className="w-16 h-16 rounded-full bg-gray-200 flex items-center justify-center text-gray-400 text-2xl">👤</div>
+          ? <img src={data.personalInfo.photoUrl} alt="" style={{ width: '56px', height: '56px', borderRadius: '50%', objectFit: 'cover' }} />
+          : <div style={{ width: '56px', height: '56px', borderRadius: '50%', background: '#e5e7eb', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '22px', color: '#9ca3af' }}>👤</div>
         }
         <div>
-          <h1 className="text-[22px] font-bold text-gray-900">{data.personalInfo?.fullName || 'Your Name'}</h1>
-          {data.personalInfo?.jobTitle && <p className="text-[13px] text-gray-500">{data.personalInfo.jobTitle}</p>}
-          <div className="text-[11px] text-gray-400 flex flex-wrap gap-x-1 mt-0.5">
-            {[data.personalInfo?.email, data.personalInfo?.phone, data.personalInfo?.location].filter(Boolean).map((t, i) => (
-              <React.Fragment key={i}>{i > 0 && <span className="mx-0.5">·</span>}<span>{t}</span></React.Fragment>
-            ))}
-          </div>
+          <h1>{data.personalInfo?.fullName || 'Your Name'}</h1>
+          {data.personalInfo?.jobTitle && <p style={{ fontSize: '13px', color: '#6b7280' }}>{data.personalInfo.jobTitle}</p>}
+          {contact.length > 0 && <div style={{ fontSize: '11px', color: '#9ca3af', marginTop: '2px' }}>{contact.join(' · ')}</div>}
         </div>
       </div>
       <ResumeBody data={data} accent="#374151" />
